@@ -1,3 +1,5 @@
+#include "types.h"
+
 // Flags for wmap
 #define MAP_PRIVATE 0x0001
 #define MAP_SHARED 0x0002
@@ -26,3 +28,10 @@ struct wmapinfo {
     int length[MAX_WMMAP_INFO];         // Size of mapping
     int n_loaded_pages[MAX_WMMAP_INFO]; // Number of pages physically loaded into memory
 };
+
+//function declarations
+int sys_wmap(void);
+int sys_wunmap(void);
+int sys_wremap(void);
+int sys_getpgdirinfo(void);
+int sys_getwmapinfo(void);
