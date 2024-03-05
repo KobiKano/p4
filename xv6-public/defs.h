@@ -172,6 +172,7 @@ void            uartputc(int);
 
 // vm.c
 void            seginit(void);
+static int      mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
 char*           uva2ka(pde_t*, char*);

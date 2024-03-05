@@ -11,10 +11,13 @@
 #include "file.h"
 #include "fcntl.h"
 
+//macro defs
+#define PAGE_SIZE  4096
 
 /**
  * wmap system call
  * 4 modes of operation
+ * 
  * a) MAP_ANONYMOUS: It's NOT a file-backed mapping. 
  * You can ignore the last argument (fd) if this flag is provided.
  * 
@@ -46,7 +49,76 @@
 */
 int sys_wmap(void)
 {
-    
+    //fetch args
+    uint addr;
+    int length;
+    int flags;
+    int fd;
+
+    if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+    {
+        //error occured return failiure
+        return FAILED;
+    }
+
+    //get calling process
+    struct proc* proc = myproc();
+    struct pde_t* pde = proc->pgdir;
+
+    //parse flags and check for errors
+    if (flags & MAP_FIXED == MAP_FIXED)
+    {
+        //check for valid address
+        if (addr < 0x60000000 | 
+        (addr + (0x1000 * (length % 4096))) > 0x80000000 | 
+        addr % PAGE_SIZE != 0)
+        {
+            //error return
+            return FAILED;
+        }
+    }
+    else
+    {
+        //find address mapping
+    }
+
+    //check if private or shared error in input
+    if ((flags & MAP_PRIVATE == MAP_PRIVATE && flags & MAP_SHARED == MAP_SHARED) |
+        (flags & MAP_PRIVATE != MAP_PRIVATE && flags & MAP_SHARED != MAP_SHARED))
+    {
+        //error return
+        return FAILED;
+    }
+
+    //map pages
+    int n = 0;
+    while (n != length)
+    {
+        //check if shared, if so map same physical memory
+
+        //if private map new physical memory and copy
+
+        
+        void* mem = kalloc();
+        if (mem == 0x0)
+        {
+            //error return
+            return FAILED;
+        }
+
+        if (mappages(pde, addr, 4096, V2P(mem), PTE_W | PTE_U) < 0)
+        {
+            //error return
+            return FAILED;
+        }
+
+        //modify process pgdirinfo and wmapinfo
+
+
+        //incrememnt values
+        n += 4096;
+        addr += 0x1000;
+    }    
 }
 
 /**
