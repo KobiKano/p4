@@ -14,6 +14,17 @@
 //macro defs
 #define PAGE_SIZE  4096
 
+//typedefs
+struct virtual_alloc {
+    uint addr;
+    int length;
+    int flags;
+    struct virtual_alloc* next;
+};
+
+//global defs
+
+
 /**
  * wmap system call
  * 4 modes of operation

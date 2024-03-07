@@ -53,6 +53,7 @@ struct proc {
   char name[16];               // Process name (debugging)
   struct pgdirinfo _pgdirinfo; // information about page directory
   struct wmapinfo  _wmapinfo;  // information about mappings
+  struct mappings  _mappings;
 };
 
 // Process memory is laid out contiguously, low addresses first:

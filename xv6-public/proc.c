@@ -112,6 +112,12 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  //allocate tracking vals
+  p->_wmapinfo.index = 0;
+  p->_pgdirinfo.index = 0;
+  p->_mappings.size = MAX_WMMAP_INFO;
+  p->_mappings.index = 0;
+
   return p;
 }
 
