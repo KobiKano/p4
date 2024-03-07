@@ -46,8 +46,12 @@ int add_mappings(struct proc* p, uint addr, int length, int flags, int fd)
  * Remove values from process struct wmapinfo
  * Modifies array to be contiguous
 */
-int remove_mappings(struct proc* p, int index)
+void remove_mappings(struct proc* p, int index)
 {
+    if (index > p->_wmapinfo.total_mmaps)
+    {
+        return;
+    }
     //remove value
     for (int i = index; i < p->_wmapinfo.total_mmaps - 1; i++)
     {
@@ -212,7 +216,11 @@ int sys_wmap(void)
     else
     {
         //find address mapping
-        addr = find_space(proc, length);
+        if (addr = find_space(proc, length) == 0x0)
+        {
+            //no address avaliable
+            return FAILED;
+        }
     }
 
     //map pages
@@ -258,7 +266,39 @@ int sys_wunmap(void)
         return FAILED;
     }
 
-    
+    //get process
+    struct proc* p = myproc();
+
+    //find address to map
+    int i;
+    for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    {
+        if (addr == p->_wmapinfo.addr[i])
+        {
+            //match found
+            break;
+        }
+    }
+
+    //check if map not found
+    if (i == p->_wmapinfo.total_mmaps)
+    {
+        //error return
+        return FAILED;
+    }
+
+    //check if file backed
+    if (p->_wmapinfo.flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS)
+    {
+        //write to file
+        //TODO:
+    }
+
+    //remove mapping
+    remove_mappings(p, i);
+
+    //default return
+    return SUCCESS;
 }
 
 /**
