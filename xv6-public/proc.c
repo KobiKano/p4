@@ -113,10 +113,8 @@ found:
   p->context->eip = (uint)forkret;
 
   //allocate tracking vals
-  p->_wmapinfo.index = 0;
+  p->_wmapinfo.total_mmaps = 0;
   p->_pgdirinfo.index = 0;
-  p->_mappings.size = MAX_WMMAP_INFO;
-  p->_mappings.index = 0;
 
   return p;
 }

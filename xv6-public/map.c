@@ -12,31 +12,13 @@
 #include "fcntl.h"
 
 //macro defs
-#define PAGE_SIZE  4096
-
-//typedefs
-struct virtual_alloc {
-    uint addr;
-    int length;
-    int flags;
-    struct virtual_alloc* next;
-};
 
 //global defs
 
 //helper functions
-/**
- * Add values to process struct pgdirinfo
- * Add to end of array
- * skips if full
-*/
-int add_pgdirinfo(struct proc* p, uint va)
-{
-
-}
 
 /**
- * Add values to process struct mappings and wmapinfo
+ * Add values to process struct wmapinfo
  * Add to end of array
  * skips if full
 */
@@ -46,16 +28,7 @@ int add_mappings(struct proc* p, uint addr, int length, int flags)
 }
 
 /**
- * Remove values from process struct pgdirinfo
- * Modifies array to be contiguous
-*/
-int remove_pgdirinfo(struct proc* p, int va)
-{
-
-}
-
-/**
- * Remove values from process struct mappings and wmapinfo
+ * Remove values from process struct wmapinfo
  * Modifies array to be contiguous
 */
 int remove_mappings(struct proc* p, uint addr)
@@ -124,31 +97,32 @@ int sys_wmap(void)
     }
 
     //parse flags and check for errors
+    length = PGROUNDUP(length);
     if (flags & MAP_FIXED == MAP_FIXED)
     {
         //check for valid address bounds
         if (addr < 0x60000000 | 
-        (addr + (0x1000 * (length % 4096))) > 0x80000000 | 
-        addr % PAGE_SIZE != 0)
+        (addr + (0x1000 * (length / PGSIZE))) > 0x80000000 | 
+        addr % PGSIZE != 0)
         {
             //error return
             return FAILED;
         }
 
         //check if region avaliable
-        for (int i = 0; i < proc->_mappings.index; i++)
+        for (int i = 0; i < proc->_wmapinfo.total_mmaps; i++)
         {
             //check if addr start within bounds
-            if (addr >= proc->_mappings.map[i].addr && 
-            addr <= (proc->_mappings.map[i].addr + proc->_mappings.map[i].length))
+            if (addr >= proc->_wmapinfo.addr[i] && 
+            addr <= (proc->_wmapinfo.addr[i] + proc->_wmapinfo.length[i]))
             {
                 //error return
                 return FAILED;
             }
 
             //check if addr end withing bounds
-            if ((addr + length) >= proc->_mappings.map[i].addr && 
-            (addr + length) <= (proc->_mappings.map[i].addr + proc->_mappings.map[i].length))
+            if ((addr + length) >= proc->_wmapinfo.addr[i] && 
+            (addr + length) <= (proc->_wmapinfo.addr[i] + proc->_wmapinfo.length[i]))
             {
                 //error return
                 return FAILED;

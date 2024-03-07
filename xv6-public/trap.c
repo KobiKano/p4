@@ -77,6 +77,43 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  case T_PGFLT:
+    //check if mapped
+    uint addr = rcr2();
+    struct proc* p = myproc();
+    char success = 0;
+    //check all mappings
+    for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    {
+      //check if within bounds
+      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + p->_wmapinfo.length[i]))
+      {
+        //add to pgdir
+        addr = PGROUNDDOWN(addr);
+        void* mem = kalloc();
+        memset(mem, 0, PGSIZE);
+        mappages(p->pgdir, addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+
+        //add to pgdirinfo
+        int index = p->_pgdirinfo.index;
+        p->_wmapinfo.n_loaded_pages[i]++;
+        p->_pgdirinfo.n_upages++;
+        p->_pgdirinfo.va[index] = addr;
+        p->_pgdirinfo.pa[index] = V2P(mem);
+        p->_pgdirinfo.index++;
+
+        //break
+        success = 1;
+        break;
+      }
+    }
+    //else error
+    if (success != 1)
+    {
+      cprintf("Segmentation Fault\n");
+      myproc()->killed = 1;
+    }
+    break;
 
   //PAGEBREAK: 13
   default:
