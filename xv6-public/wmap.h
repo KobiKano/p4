@@ -18,7 +18,6 @@ struct pgdirinfo {
     uint n_upages;           // the number of allocated physical pages in the process's user address space
     uint va[MAX_UPAGE_INFO]; // the virtual addresses of the allocated physical pages in the process's user address space
     uint pa[MAX_UPAGE_INFO]; // the physical addresses of the allocated physical pages in the process's user address space
-    int index;
 };
 
 // for `getwmapinfo`
@@ -28,12 +27,6 @@ struct wmapinfo {
     int addr[MAX_WMMAP_INFO];           // Starting address of mapping
     int length[MAX_WMMAP_INFO];         // Size of mapping
     int n_loaded_pages[MAX_WMMAP_INFO]; // Number of pages physically loaded into memory
-    int index;
-};
-
-//track mapping flags
-struct mappings {
-    struct virtual_alloc map[MAX_WMMAP_INFO];
-    int size;
-    int index;
+    int flags[MAX_WMMAP_INFO];
+    int fds[MAX_WMMAP_INFO];
 };

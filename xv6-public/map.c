@@ -12,6 +12,7 @@
 #include "fcntl.h"
 
 //macro defs
+#define LEN_TO_PAGE(va)   (0x1000 * ((int)(va) / PGSIZE))
 
 //global defs
 
@@ -22,18 +23,97 @@
  * Add to end of array
  * skips if full
 */
-int add_mappings(struct proc* p, uint addr, int length, int flags)
+int add_mappings(struct proc* p, uint addr, int length, int flags, int fd)
 {
+    if (p->_wmapinfo.total_mmaps == MAX_WMMAP_INFO)
+    {
+        return -1;
+    }
 
+    //add to mappings
+    int index = p->_wmapinfo.total_mmaps;
+    p->_wmapinfo.addr[index] = addr;
+    p->_wmapinfo.length[index] = length;
+    p->_wmapinfo.n_loaded_pages[index] = 0;
+    p->_wmapinfo.flags[index] = flags;
+    p->_wmapinfo.fds[index] = fd;
+    p->_wmapinfo.total_mmaps++;
+
+    return 0;
 }
 
 /**
  * Remove values from process struct wmapinfo
  * Modifies array to be contiguous
 */
-int remove_mappings(struct proc* p, uint addr)
+int remove_mappings(struct proc* p, int index)
 {
+    //remove value
+    for (int i = index; i < p->_wmapinfo.total_mmaps - 1; i++)
+    {
+        //shift next down
+        p->_wmapinfo.addr[i] = p->_wmapinfo.addr[i+1];
+        p->_wmapinfo.length[i] = p->_wmapinfo.length[i+1];
+        p->_wmapinfo.n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i+1];
+        p->_wmapinfo.flags[i] = p->_wmapinfo.flags[i+1];
+        p->_wmapinfo.fds[i] = p->_wmapinfo.fds[i+1];
+    }
 
+    //decrement value
+    p->_wmapinfo.total_mmaps--;
+}
+
+/**
+ * Find space for address
+ * Simple linear search where if overlap found, address set to page after overlapped page
+ * continue while loop on new addr
+*/
+uint find_space(struct proc* p, int length)
+{
+    uint addr = 0x60000000;
+
+    //find addr
+    while (addr < 0x80000000)
+    {
+        //check if address would be out of bounds
+        if (addr + LEN_TO_PAGE(length) > 0x80000000)
+        {
+            return 0x0;
+        }
+
+        int overlap = 0;
+        int i;
+        for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
+        {
+            //check for overlap
+            //check if addr start within bounds
+            if (addr >= p->_wmapinfo.addr[i] && 
+            addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            {
+                overlap = 1;
+                break;
+            }
+
+            //check if addr end withing bounds
+            if ((addr + LEN_TO_PAGE(length)) >= p->_wmapinfo.addr[i] && 
+            (addr + LEN_TO_PAGE(length)) <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            {
+                overlap = 1;
+                break;
+            }
+        }
+
+        //check if no overlap found
+        if (overlap == 0)
+        {
+            return addr;
+        }
+        else
+        {
+            //add change addr to end of overlapped value
+            addr = p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i]);
+        }
+    }
 }
 
 
@@ -114,15 +194,15 @@ int sys_wmap(void)
         {
             //check if addr start within bounds
             if (addr >= proc->_wmapinfo.addr[i] && 
-            addr <= (proc->_wmapinfo.addr[i] + proc->_wmapinfo.length[i]))
+            addr <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
             {
                 //error return
                 return FAILED;
             }
 
             //check if addr end withing bounds
-            if ((addr + length) >= proc->_wmapinfo.addr[i] && 
-            (addr + length) <= (proc->_wmapinfo.addr[i] + proc->_wmapinfo.length[i]))
+            if ((addr + LEN_TO_PAGE(length)) >= proc->_wmapinfo.addr[i] && 
+            (addr + LEN_TO_PAGE(length)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
             {
                 //error return
                 return FAILED;
@@ -132,7 +212,7 @@ int sys_wmap(void)
     else
     {
         //find address mapping
-        //TODO:
+        addr = find_space(proc, length);
     }
 
     //map pages
@@ -147,20 +227,13 @@ int sys_wmap(void)
             return FAILED;
         }
 
-        //modify process pgdirinfo and wmapinfo and mappings
-        if (add_pgdirinfo(proc, addr_cpy) < 0)
-        {
-            //error return
-            return FAILED;
-        }
-
         //incrememnt values
         n += 4096;
         addr_cpy += 0x1000;
     }
 
     //add mapping
-    if (add_mappings(proc, addr, length, flags))
+    if (add_mappings(proc, addr, length, flags, fd) < 0)
     {
         //error return
         return FAILED;
@@ -177,7 +250,15 @@ int sys_wmap(void)
 */
 int sys_wunmap(void)
 {
+    //get address
+    uint addr;
+    if (argint(0, &addr) < 0)
+    {
+        //error return
+        return FAILED;
+    }
 
+    
 }
 
 /**
@@ -229,4 +310,51 @@ int sys_getpgdirinfo(void)
 int sys_getwmapinfo(void)
 {
 
+}
+
+int page_fault_handler(void)
+{
+    //check if mapped
+    uint addr = rcr2();
+    struct proc* p = myproc();
+    char success = 0;
+    //check all mappings
+    for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    {
+      //check if within bounds
+      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+      {
+        //add to pgdir
+        addr = PGROUNDDOWN(addr);
+        void* mem = kalloc();
+
+        //fill memory
+        //TODO: check flags for copy on write or file
+        if (memset(mem, 0, PGSIZE) == 0x0)
+        {
+          cprintf("Segmentation Fault\n");
+          return -1;
+        }
+
+        //allocate
+        if (mappages(p->pgdir, addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+        {
+          cprintf("Segmentation Fault\n");
+          return -1;
+        }
+
+        //add to pgdirinfo
+        int index = p->_pgdirinfo.n_upages;
+        p->_wmapinfo.n_loaded_pages[i]++;
+        p->_pgdirinfo.n_upages++;
+        p->_pgdirinfo.va[index] = addr;
+        p->_pgdirinfo.pa[index] = V2P(mem);
+        p->_pgdirinfo.n_upages++;
+
+        return 0;
+      }
+    }
+    //else error
+    cprintf("Segmentation Fault\n");
+    return -1;
 }
