@@ -24,6 +24,45 @@ struct virtual_alloc {
 
 //global defs
 
+//helper functions
+/**
+ * Add values to process struct pgdirinfo
+ * Add to end of array
+ * skips if full
+*/
+int add_pgdirinfo(struct proc* p, uint va)
+{
+
+}
+
+/**
+ * Add values to process struct mappings and wmapinfo
+ * Add to end of array
+ * skips if full
+*/
+int add_mappings(struct proc* p, uint addr, int length, int flags)
+{
+
+}
+
+/**
+ * Remove values from process struct pgdirinfo
+ * Modifies array to be contiguous
+*/
+int remove_pgdirinfo(struct proc* p, int va)
+{
+
+}
+
+/**
+ * Remove values from process struct mappings and wmapinfo
+ * Modifies array to be contiguous
+*/
+int remove_mappings(struct proc* p, uint addr)
+{
+
+}
+
 
 /**
  * wmap system call
@@ -76,23 +115,6 @@ int sys_wmap(void)
     struct proc* proc = myproc();
     struct pde_t* pde = proc->pgdir;
 
-    //parse flags and check for errors
-    if (flags & MAP_FIXED == MAP_FIXED)
-    {
-        //check for valid address
-        if (addr < 0x60000000 | 
-        (addr + (0x1000 * (length % 4096))) > 0x80000000 | 
-        addr % PAGE_SIZE != 0)
-        {
-            //error return
-            return FAILED;
-        }
-    }
-    else
-    {
-        //find address mapping
-    }
-
     //check if private or shared error in input
     if ((flags & MAP_PRIVATE == MAP_PRIVATE && flags & MAP_SHARED == MAP_SHARED) |
         (flags & MAP_PRIVATE != MAP_PRIVATE && flags & MAP_SHARED != MAP_SHARED))
@@ -101,35 +123,77 @@ int sys_wmap(void)
         return FAILED;
     }
 
+    //parse flags and check for errors
+    if (flags & MAP_FIXED == MAP_FIXED)
+    {
+        //check for valid address bounds
+        if (addr < 0x60000000 | 
+        (addr + (0x1000 * (length % 4096))) > 0x80000000 | 
+        addr % PAGE_SIZE != 0)
+        {
+            //error return
+            return FAILED;
+        }
+
+        //check if region avaliable
+        for (int i = 0; i < proc->_mappings.index; i++)
+        {
+            //check if addr start within bounds
+            if (addr >= proc->_mappings.map[i].addr && 
+            addr <= (proc->_mappings.map[i].addr + proc->_mappings.map[i].length))
+            {
+                //error return
+                return FAILED;
+            }
+
+            //check if addr end withing bounds
+            if ((addr + length) >= proc->_mappings.map[i].addr && 
+            (addr + length) <= (proc->_mappings.map[i].addr + proc->_mappings.map[i].length))
+            {
+                //error return
+                return FAILED;
+            }
+        }
+    }
+    else
+    {
+        //find address mapping
+        //TODO:
+    }
+
     //map pages
     int n = 0;
+    uint addr_cpy = addr;
     while (n != length)
     {
-        //check if shared, if so map same physical memory
-
-        //if private map new physical memory and copy
-
-        
-        void* mem = kalloc();
-        if (mem == 0x0)
+        //handle physical address in trap
+        if (mappages(pde, addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
         {
             //error return
             return FAILED;
         }
 
-        if (mappages(pde, addr, 4096, V2P(mem), PTE_W | PTE_U) < 0)
+        //modify process pgdirinfo and wmapinfo and mappings
+        if (add_pgdirinfo(proc, addr_cpy) < 0)
         {
             //error return
             return FAILED;
         }
-
-        //modify process pgdirinfo and wmapinfo
-
 
         //incrememnt values
         n += 4096;
-        addr += 0x1000;
-    }    
+        addr_cpy += 0x1000;
+    }
+
+    //add mapping
+    if (add_mappings(proc, addr, length, flags))
+    {
+        //error return
+        return FAILED;
+    }
+
+    //return address on success
+    return addr;
 }
 
 /**
