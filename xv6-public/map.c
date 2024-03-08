@@ -4,6 +4,7 @@
 #include "param.h"
 #include "stat.h"
 #include "mmu.h"
+#include "memlayout.h"
 #include "proc.h"
 #include "fs.h"
 #include "spinlock.h"
@@ -52,6 +53,7 @@ void remove_mappings(struct proc* p, int index)
     {
         return;
     }
+
     //remove value
     for (int i = index; i < p->_wmapinfo.total_mmaps - 1; i++)
     {
@@ -236,7 +238,7 @@ int sys_wmap(void)
         }
 
         //incrememnt values
-        n += 4096;
+        n += PGSIZE;
         addr_cpy += 0x1000;
     }
 
@@ -288,15 +290,45 @@ int sys_wunmap(void)
     }
 
     //check if file backed
-    if (p->_wmapinfo.flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS)
+    if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS) && 
+    (p->_wmapinfo.flags[i] & MAP_SHARED == MAP_SHARED))
     {
         //write to file
-        //TODO:
+        struct file* f;
+        if(p->_wmapinfo.fds[i] < 0 || p->_wmapinfo.fds[i] >= NOFILE || (f=myproc()->ofile[p->_wmapinfo.fds[i]]) == 0)
+        {
+            //error return
+            return FAILED;
+        }
+        
+        //write from each virtual address
+        uint addr_cpy = addr;
+        int n = 0;
+        while (n != p->_wmapinfo.length[i])
+        {
+            filewrite(f, (char*)addr_cpy, PGSIZE);
+
+            n += PGSIZE;
+            addr_cpy += 0x1000;
+        }
+
     }
 
     //remove mapping
     remove_mappings(p, i);
 
+    //free physical mappings
+    int n = 0;
+    while(n != p->_wmapinfo.length[i])
+    {
+        pte_t* pte = walkpgdir(p->pgdir, addr, 0);
+        kfree((char*)P2V(PTE_ADDR(*pte)));
+        *pte = 0;
+
+        n += PGSIZE;
+        addr += 0x1000;
+    }
+    
     //default return
     return SUCCESS;
 }
@@ -366,7 +398,7 @@ int page_fault_handler(void)
       {
         //add to pgdir
         addr = PGROUNDDOWN(addr);
-        void* mem = kalloc();
+        void* mem = (void*)kalloc();
 
         //fill memory
         //TODO: check flags for copy on write or file
