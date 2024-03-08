@@ -70,6 +70,36 @@ void remove_mappings(struct proc* p, int index)
 }
 
 /**
+ * Remove entry from pgdirinfo
+*/
+void remove_pgdir(struct proc* p, uint addr)
+{
+    //find index
+    int i;
+    for (i = 0; i < p->_pgdirinfo.n_upages; i++)
+    {
+        if (addr == p->_pgdirinfo.pa[i])
+        {
+            break;
+        }
+    }
+
+    //check if not found
+    if (i == p->_pgdirinfo.n_upages)
+    {
+        return;
+    }
+
+    //remove value and shift values
+    for (int j = i; j < p->_pgdirinfo.n_upages - 1; j++)
+    {
+        p->_pgdirinfo.pa[j] = p->_pgdirinfo.pa[j+1];
+        p->_pgdirinfo.va[j] = p->_pgdirinfo.va[j+1];
+    }
+    p->_pgdirinfo.n_upages--;
+}
+
+/**
  * Find space for address
  * Simple linear search where if overlap found, address set to page after overlapped page
  * continue while loop on new addr
@@ -324,6 +354,7 @@ int sys_wunmap(void)
         pte_t* pte = walkpgdir(p->pgdir, addr, 0);
         kfree((char*)P2V(PTE_ADDR(*pte)));
         *pte = 0;
+        remove_pgdir(p, addr);
 
         n += PGSIZE;
         addr += 0x1000;
@@ -363,7 +394,25 @@ int sys_wremap(void)
 */
 int sys_getpgdirinfo(void)
 {
+    //get pointer
+    struct pgdirinfo* ptr;
+    if (argptr(0, &ptr, sizeof(struct pgdirinfo)) < 0)
+    {
+        //error return
+        return FAILED;
+    }
 
+    //copy values
+    struct proc* p = myproc();
+    ptr->n_upages = p->_pgdirinfo.n_upages;
+    for (int i = 0; i < ptr->n_upages; i++)
+    {
+        ptr->pa[i] = p->_pgdirinfo.pa[i];
+        ptr->va[i] = p->_pgdirinfo.va[i];
+    }
+
+    //default return
+    return SUCCESS;
 }
 
 /**
@@ -381,7 +430,28 @@ int sys_getpgdirinfo(void)
 */
 int sys_getwmapinfo(void)
 {
+    //get pointer
+    struct wmapinfo* ptr;
+    if (argptr(0, &ptr, sizeof(struct wmapinfo)) < 0)
+    {
+        //error return
+        return FAILED;
+    }
 
+    //copy values
+    struct proc* p = myproc();
+    ptr->total_mmaps = p->_wmapinfo.total_mmaps;
+    for (int i = 0; i < ptr->total_mmaps; i++)
+    {
+        ptr->addr[i] = p->_wmapinfo.addr[i];
+        ptr->length[i] = p->_wmapinfo.length[i];
+        ptr->n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i];
+        ptr->flags[i] = p->_wmapinfo.flags[i];
+        ptr->fds[i] = p->_wmapinfo.fds[i];
+    }
+
+    //default return
+    return SUCCESS;
 }
 
 int page_fault_handler(void)
