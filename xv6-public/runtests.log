@@ -1,0 +1,196 @@
+starting build
+
+**********************************************************************
+
+Test build
+build xv6 using make
+
+**********************************************************************
+Trying to build project using make
+make xv6.img fs.img
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie -fno-pic -O -nostdinc -I. -c bootmain.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie -fno-pic -nostdinc -I. -c bootasm.S
+ld -m    elf_i386 -N -e start -Ttext 0x7C00 -o bootblock.o bootasm.o bootmain.o
+objdump -S bootblock.o > bootblock.asm
+objcopy -S -O binary -j .text bootblock.o bootblock
+./sign.pl bootblock
+boot block is 451 bytes (max 510)
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o bio.o bio.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o console.o console.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o exec.o exec.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o file.o file.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o fs.o fs.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o ide.o ide.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o ioapic.o ioapic.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o kalloc.o kalloc.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o kbd.o kbd.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o lapic.o lapic.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o log.o log.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o main.o main.c
+gcc -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer -fno-stack-protector -fno-pie -no-pie   -c -o map.o map.c
+map.c: In function ‘sys_wmap’:
+map.c:198:19: error: pointer targets in passing argument 2 of ‘argint’ differ in signedness [-Werror=pointer-sign]
+  198 |     if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+      |                   ^~~~~
+      |                   |
+      |                   uint * {aka unsigned int *}
+In file included from map.c:3:
+defs.h:157:29: note: expected ‘int *’ but argument is of type ‘uint *’ {aka ‘unsigned int *’}
+  157 | int             argint(int, int*);
+      |                             ^~~~
+map.c:198:26: error: suggest parentheses around comparison in operand of ‘|’ [-Werror=parentheses]
+  198 |     if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+      |         ~~~~~~~~~~~~~~~~~^~~
+map.c:198:75: error: suggest parentheses around comparison in operand of ‘|’ [-Werror=parentheses]
+  198 |     if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+      |                                                         ~~~~~~~~~~~~~~~~~~^~~
+map.c:198:96: error: suggest parentheses around comparison in operand of ‘|’ [-Werror=parentheses]
+  198 |     if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+      |                                                                                 ~~~~~~~~~~~~~~~^~~
+map.c:206:25: error: initialization of ‘struct pde_t *’ from incompatible pointer type ‘pde_t *’ {aka ‘unsigned int *’} [-Werror=incompatible-pointer-types]
+  206 |     struct pde_t* pde = proc->pgdir;
+      |                         ^~~~
+map.c:209:16: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  209 |     if ((flags & MAP_PRIVATE == MAP_PRIVATE && flags & MAP_SHARED == MAP_SHARED) |
+      |                ^
+map.c:209:54: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  209 |     if ((flags & MAP_PRIVATE == MAP_PRIVATE && flags & MAP_SHARED == MAP_SHARED) |
+      |                                                      ^
+map.c:210:16: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  210 |         (flags & MAP_PRIVATE != MAP_PRIVATE && flags & MAP_SHARED != MAP_SHARED))
+      |                ^
+map.c:210:54: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  210 |         (flags & MAP_PRIVATE != MAP_PRIVATE && flags & MAP_SHARED != MAP_SHARED))
+      |                                                      ^
+map.c:218:15: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  218 |     if (flags & MAP_FIXED == MAP_FIXED)
+      |               ^
+map.c:221:18: error: suggest parentheses around comparison in operand of ‘|’ [-Werror=parentheses]
+  221 |         if (addr < 0x60000000 |
+      |             ~~~~~^~~~~~~~~~~~
+map.c:223:23: error: suggest parentheses around comparison in operand of ‘|’ [-Werror=parentheses]
+  223 |         addr % PGSIZE != 0)
+      |         ~~~~~~~~~~~~~~^~~~
+map.c:252:13: error: suggest parentheses around assignment used as truth value [-Werror=parentheses]
+  252 |         if (addr = find_space(proc, length) == 0x0)
+      |             ^~~~
+map.c:265:22: error: passing argument 1 of ‘mappages’ from incompatible pointer type [-Werror=incompatible-pointer-types]
+  265 |         if (mappages(pde, addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
+      |                      ^~~
+      |                      |
+      |                      struct pde_t *
+In file included from map.c:3:
+defs.h:181:33: note: expected ‘pde_t *’ {aka ‘unsigned int *’} but argument is of type ‘struct pde_t *’
+  181 | int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+      |                          ~~~~~~~^~~~~
+map.c:265:27: error: passing argument 2 of ‘mappages’ makes pointer from integer without a cast [-Werror=int-conversion]
+  265 |         if (mappages(pde, addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
+      |                           ^~~~~~~~
+      |                           |
+      |                           uint {aka unsigned int}
+In file included from map.c:3:
+defs.h:181:46: note: expected ‘void *’ but argument is of type ‘uint’ {aka ‘unsigned int’}
+  181 | int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+      |                                        ~~~~~~^~
+map.c: In function ‘sys_wunmap’:
+map.c:296:19: error: pointer targets in passing argument 2 of ‘argint’ differ in signedness [-Werror=pointer-sign]
+  296 |     if (argint(0, &addr) < 0)
+      |                   ^~~~~
+      |                   |
+      |                   uint * {aka unsigned int *}
+In file included from map.c:3:
+defs.h:157:29: note: expected ‘int *’ but argument is of type ‘uint *’ {aka ‘unsigned int *’}
+  157 | int             argint(int, int*);
+      |                             ^~~~
+map.c:324:33: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  324 |     if ((p->_wmapinfo->flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS) &&
+      |                                 ^
+map.c:325:29: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  325 |     (p->_wmapinfo->flags[i] & MAP_SHARED == MAP_SHARED))
+      |                             ^
+map.c:355:42: error: passing argument 2 of ‘walkpgdir’ makes pointer from integer without a cast [-Werror=int-conversion]
+  355 |         pte_t* pte = walkpgdir(p->pgdir, addr, 0);
+      |                                          ^~~~
+      |                                          |
+      |                                          uint {aka unsigned int}
+In file included from map.c:3:
+defs.h:180:53: note: expected ‘const void *’ but argument is of type ‘uint’ {aka ‘unsigned int’}
+  180 | pte_t*          walkpgdir(pde_t *pgdir, const void *va, int alloc);
+      |                                         ~~~~~~~~~~~~^~
+map.c: In function ‘sys_getpgdirinfo’:
+map.c:400:19: error: passing argument 2 of ‘argptr’ from incompatible pointer type [-Werror=incompatible-pointer-types]
+  400 |     if (argptr(0, &ptr, sizeof(struct pgdirinfo)) < 0)
+      |                   ^~~~
+      |                   |
+      |                   struct pgdirinfo **
+In file included from map.c:3:
+defs.h:158:29: note: expected ‘char **’ but argument is of type ‘struct pgdirinfo **’
+  158 | int             argptr(int, char**, int);
+      |                             ^~~~~~
+map.c: In function ‘sys_getwmapinfo’:
+map.c:436:19: error: passing argument 2 of ‘argptr’ from incompatible pointer type [-Werror=incompatible-pointer-types]
+  436 |     if (argptr(0, &ptr, sizeof(struct wmapinfo)) < 0)
+      |                   ^~~~
+      |                   |
+      |                   struct wmapinfo **
+In file included from map.c:3:
+defs.h:158:29: note: expected ‘char **’ but argument is of type ‘struct wmapinfo **’
+  158 | int             argptr(int, char**, int);
+      |                             ^~~~~~
+map.c: In function ‘page_fault_handler’:
+map.c:461:17: error: implicit declaration of function ‘rcr2’ [-Werror=implicit-function-declaration]
+  461 |     uint addr = rcr2();
+      |                 ^~~~
+map.c:475:36: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  475 |         if (p->_wmapinfo->flags[i] & MAP_PRIVATE != MAP_PRIVATE && p->parent->pid != 1)
+      |                                    ^
+map.c:482:49: error: comparison between pointer and integer [-Werror]
+  482 |                 if(p->parent->_pgdirinfo->va[j] == mem)
+      |                                                 ^~
+map.c:494:51: error: passing argument 2 of ‘memmove’ makes pointer from integer without a cast [-Werror=int-conversion]
+  494 |             memmove(mem, p->parent->_pgdirinfo->va[j], PGSIZE);
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+      |                                                   |
+      |                                                   uint {aka unsigned int}
+In file included from map.c:3:
+defs.h:149:32: note: expected ‘const void *’ but argument is of type ‘uint’ {aka ‘unsigned int’}
+  149 | void*           memmove(void*, const void*, uint);
+      |                                ^~~~~~~~~~~
+map.c:498:41: error: suggest parentheses around comparison in operand of ‘&’ [-Werror=parentheses]
+  498 |         else if (p->_wmapinfo->flags[i] & MAP_ANONYMOUS != MAP_ANONYMOUS)
+      |                                         ^
+map.c:501:26: error: unused variable ‘f’ [-Werror=unused-variable]
+  501 |             struct file* f = p->ofile[p->_wmapinfo->fds[i]];
+      |                          ^
+map.c:514:32: error: passing argument 2 of ‘mappages’ makes pointer from integer without a cast [-Werror=int-conversion]
+  514 |         if (mappages(p->pgdir, addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+      |                                ^~~~
+      |                                |
+      |                                uint {aka unsigned int}
+In file included from map.c:3:
+defs.h:181:46: note: expected ‘void *’ but argument is of type ‘uint’ {aka ‘unsigned int’}
+  181 | int             mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+      |                                        ~~~~~~^~
+map.c:463:10: error: unused variable ‘success’ [-Werror=unused-variable]
+  463 |     char success = 0;
+      |          ^~~~~~~
+map.c: In function ‘find_space’:
+map.c:154:1: error: control reaches end of non-void function [-Werror=return-type]
+  154 | }
+      | ^
+map.c: In function ‘sys_wremap’:
+map.c:381:1: error: control reaches end of non-void function [-Werror=return-type]
+  381 | }
+      | ^
+cc1: all warnings being treated as errors
+make: *** [<builtin>: map.o] Error 1
+
+
+test build FAILED
+ (build xv6 using make)
+ make failed (error 2)
+ required file 'xv6.img' does not exist after make
+ required file 'fs.img' does not exist after make
+
+Skipped 10 tests.
+To keep testing after failing a test, use flag '-c' or '--continue'

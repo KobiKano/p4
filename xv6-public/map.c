@@ -27,19 +27,19 @@
 */
 int add_mappings(struct proc* p, uint addr, int length, int flags, int fd)
 {
-    if (p->_wmapinfo.total_mmaps == MAX_WMMAP_INFO)
+    if (p->_wmapinfo->total_mmaps == MAX_WMMAP_INFO)
     {
         return -1;
     }
 
     //add to mappings
-    int index = p->_wmapinfo.total_mmaps;
-    p->_wmapinfo.addr[index] = addr;
-    p->_wmapinfo.length[index] = length;
-    p->_wmapinfo.n_loaded_pages[index] = 0;
-    p->_wmapinfo.flags[index] = flags;
-    p->_wmapinfo.fds[index] = fd;
-    p->_wmapinfo.total_mmaps++;
+    int index = p->_wmapinfo->total_mmaps;
+    p->_wmapinfo->addr[index] = addr;
+    p->_wmapinfo->length[index] = length;
+    p->_wmapinfo->n_loaded_pages[index] = 0;
+    p->_wmapinfo->flags[index] = flags;
+    p->_wmapinfo->fds[index] = fd;
+    p->_wmapinfo->total_mmaps++;
 
     return 0;
 }
@@ -50,24 +50,24 @@ int add_mappings(struct proc* p, uint addr, int length, int flags, int fd)
 */
 void remove_mappings(struct proc* p, int index)
 {
-    if (index > p->_wmapinfo.total_mmaps)
+    if (index > p->_wmapinfo->total_mmaps)
     {
         return;
     }
 
     //remove value
-    for (int i = index; i < p->_wmapinfo.total_mmaps - 1; i++)
+    for (int i = index; i < p->_wmapinfo->total_mmaps - 1; i++)
     {
         //shift next down
-        p->_wmapinfo.addr[i] = p->_wmapinfo.addr[i+1];
-        p->_wmapinfo.length[i] = p->_wmapinfo.length[i+1];
-        p->_wmapinfo.n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i+1];
-        p->_wmapinfo.flags[i] = p->_wmapinfo.flags[i+1];
-        p->_wmapinfo.fds[i] = p->_wmapinfo.fds[i+1];
+        p->_wmapinfo->addr[i] = p->_wmapinfo->addr[i+1];
+        p->_wmapinfo->length[i] = p->_wmapinfo->length[i+1];
+        p->_wmapinfo->n_loaded_pages[i] = p->_wmapinfo->n_loaded_pages[i+1];
+        p->_wmapinfo->flags[i] = p->_wmapinfo->flags[i+1];
+        p->_wmapinfo->fds[i] = p->_wmapinfo->fds[i+1];
     }
 
     //decrement value
-    p->_wmapinfo.total_mmaps--;
+    p->_wmapinfo->total_mmaps--;
 }
 
 /**
@@ -77,27 +77,27 @@ void remove_pgdir(struct proc* p, uint addr)
 {
     //find index
     int i;
-    for (i = 0; i < p->_pgdirinfo.n_upages; i++)
+    for (i = 0; i < p->_pgdirinfo->n_upages; i++)
     {
-        if (addr == p->_pgdirinfo.pa[i])
+        if (addr == p->_pgdirinfo->pa[i])
         {
             break;
         }
     }
 
     //check if not found
-    if (i == p->_pgdirinfo.n_upages)
+    if (i == p->_pgdirinfo->n_upages)
     {
         return;
     }
 
     //remove value and shift values
-    for (int j = i; j < p->_pgdirinfo.n_upages - 1; j++)
+    for (int j = i; j < p->_pgdirinfo->n_upages - 1; j++)
     {
-        p->_pgdirinfo.pa[j] = p->_pgdirinfo.pa[j+1];
-        p->_pgdirinfo.va[j] = p->_pgdirinfo.va[j+1];
+        p->_pgdirinfo->pa[j] = p->_pgdirinfo->pa[j+1];
+        p->_pgdirinfo->va[j] = p->_pgdirinfo->va[j+1];
     }
-    p->_pgdirinfo.n_upages--;
+    p->_pgdirinfo->n_upages--;
 }
 
 /**
@@ -120,20 +120,20 @@ uint find_space(struct proc* p, int length)
 
         int overlap = 0;
         int i;
-        for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
+        for (i = 0; i < p->_wmapinfo->total_mmaps; i++)
         {
             //check for overlap
             //check if addr start within bounds
-            if (addr >= p->_wmapinfo.addr[i] && 
-            addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            if (addr >= p->_wmapinfo->addr[i] && 
+            addr <= (p->_wmapinfo->addr[i] + LEN_TO_PAGE(p->_wmapinfo->length[i])))
             {
                 overlap = 1;
                 break;
             }
 
             //check if addr end withing bounds
-            if ((addr + LEN_TO_PAGE(length)) >= p->_wmapinfo.addr[i] && 
-            (addr + LEN_TO_PAGE(length)) <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            if ((addr + LEN_TO_PAGE(length)) >= p->_wmapinfo->addr[i] && 
+            (addr + LEN_TO_PAGE(length)) <= (p->_wmapinfo->addr[i] + LEN_TO_PAGE(p->_wmapinfo->length[i])))
             {
                 overlap = 1;
                 break;
@@ -148,7 +148,7 @@ uint find_space(struct proc* p, int length)
         else
         {
             //add change addr to end of overlapped value
-            addr = p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i]);
+            addr = p->_wmapinfo->addr[i] + LEN_TO_PAGE(p->_wmapinfo->length[i]);
         }
     }
 }
@@ -227,19 +227,19 @@ int sys_wmap(void)
         }
 
         //check if region avaliable
-        for (int i = 0; i < proc->_wmapinfo.total_mmaps; i++)
+        for (int i = 0; i < proc->_wmapinfo->total_mmaps; i++)
         {
             //check if addr start within bounds
-            if (addr >= proc->_wmapinfo.addr[i] && 
-            addr <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
+            if (addr >= proc->_wmapinfo->addr[i] && 
+            addr <= (proc->_wmapinfo->addr[i] + LEN_TO_PAGE(proc->_wmapinfo->length[i])))
             {
                 //error return
                 return FAILED;
             }
 
             //check if addr end withing bounds
-            if ((addr + LEN_TO_PAGE(length)) >= proc->_wmapinfo.addr[i] && 
-            (addr + LEN_TO_PAGE(length)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
+            if ((addr + LEN_TO_PAGE(length)) >= proc->_wmapinfo->addr[i] && 
+            (addr + LEN_TO_PAGE(length)) <= (proc->_wmapinfo->addr[i] + LEN_TO_PAGE(proc->_wmapinfo->length[i])))
             {
                 //error return
                 return FAILED;
@@ -304,9 +304,9 @@ int sys_wunmap(void)
 
     //find address to map
     int i;
-    for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    for (i = 0; i < p->_wmapinfo->total_mmaps; i++)
     {
-        if (addr == p->_wmapinfo.addr[i])
+        if (addr == p->_wmapinfo->addr[i])
         {
             //match found
             break;
@@ -314,19 +314,19 @@ int sys_wunmap(void)
     }
 
     //check if map not found
-    if (i == p->_wmapinfo.total_mmaps)
+    if (i == p->_wmapinfo->total_mmaps)
     {
         //error return
         return FAILED;
     }
 
     //check if file backed
-    if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS) && 
-    (p->_wmapinfo.flags[i] & MAP_SHARED == MAP_SHARED))
+    if ((p->_wmapinfo->flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS) && 
+    (p->_wmapinfo->flags[i] & MAP_SHARED == MAP_SHARED))
     {
         //write to file
         struct file* f;
-        if(p->_wmapinfo.fds[i] < 0 || p->_wmapinfo.fds[i] >= NOFILE || (f=myproc()->ofile[p->_wmapinfo.fds[i]]) == 0)
+        if(p->_wmapinfo->fds[i] < 0 || p->_wmapinfo->fds[i] >= NOFILE || (f=myproc()->ofile[p->_wmapinfo->fds[i]]) == 0)
         {
             //error return
             return FAILED;
@@ -335,7 +335,7 @@ int sys_wunmap(void)
         //write from each virtual address
         uint addr_cpy = addr;
         int n = 0;
-        while (n != p->_wmapinfo.length[i])
+        while (n != p->_wmapinfo->length[i])
         {
             filewrite(f, (char*)addr_cpy, PGSIZE);
 
@@ -350,7 +350,7 @@ int sys_wunmap(void)
 
     //free physical mappings
     int n = 0;
-    while(n != p->_wmapinfo.length[i])
+    while(n != p->_wmapinfo->length[i])
     {
         pte_t* pte = walkpgdir(p->pgdir, addr, 0);
         kfree((char*)P2V(PTE_ADDR(*pte)));
@@ -405,11 +405,11 @@ int sys_getpgdirinfo(void)
 
     //copy values
     struct proc* p = myproc();
-    ptr->n_upages = p->_pgdirinfo.n_upages;
+    ptr->n_upages = p->_pgdirinfo->n_upages;
     for (int i = 0; i < ptr->n_upages; i++)
     {
-        ptr->pa[i] = p->_pgdirinfo.pa[i];
-        ptr->va[i] = p->_pgdirinfo.va[i];
+        ptr->pa[i] = p->_pgdirinfo->pa[i];
+        ptr->va[i] = p->_pgdirinfo->va[i];
     }
 
     //default return
@@ -441,14 +441,14 @@ int sys_getwmapinfo(void)
 
     //copy values
     struct proc* p = myproc();
-    ptr->total_mmaps = p->_wmapinfo.total_mmaps;
+    ptr->total_mmaps = p->_wmapinfo->total_mmaps;
     for (int i = 0; i < ptr->total_mmaps; i++)
     {
-        ptr->addr[i] = p->_wmapinfo.addr[i];
-        ptr->length[i] = p->_wmapinfo.length[i];
-        ptr->n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i];
-        ptr->flags[i] = p->_wmapinfo.flags[i];
-        ptr->fds[i] = p->_wmapinfo.fds[i];
+        ptr->addr[i] = p->_wmapinfo->addr[i];
+        ptr->length[i] = p->_wmapinfo->length[i];
+        ptr->n_loaded_pages[i] = p->_wmapinfo->n_loaded_pages[i];
+        ptr->flags[i] = p->_wmapinfo->flags[i];
+        ptr->fds[i] = p->_wmapinfo->fds[i];
     }
 
     //default return
@@ -462,43 +462,43 @@ int page_fault_handler(void)
     struct proc* p = myproc();
     char success = 0;
     //check all mappings
-    for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    for(int i = 0; i < p->_wmapinfo->total_mmaps; i++)
     {
       //check if within bounds
-      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+      if(addr >= p->_wmapinfo->addr[i] && addr <= (p->_wmapinfo->addr[i] + LEN_TO_PAGE(p->_wmapinfo->length[i])))
       {
         //add to pgdir
         addr = PGROUNDDOWN(addr);
         void* mem = (void*)kalloc();
 
         //check flags for copy on write
-        if (p->_wmapinfo.flags[i] & MAP_PRIVATE != MAP_PRIVATE && p->parent->pid != 1)
+        if (p->_wmapinfo->flags[i] & MAP_PRIVATE != MAP_PRIVATE && p->parent->pid != 1)
         {
             //process is child process with private mapping
             //find address of parent mem
             int j;
-            for (j = 0; j < p->parent->_pgdirinfo.n_upages; j++)
+            for (j = 0; j < p->parent->_pgdirinfo->n_upages; j++)
             {
-                if(p->parent->_pgdirinfo.va[j] == mem)
+                if(p->parent->_pgdirinfo->va[j] == mem)
                 {
                     break;
                 }
             }
-            if (j == p->parent->_pgdirinfo.n_upages)
+            if (j == p->parent->_pgdirinfo->n_upages)
             {
                 cprintf("Segmentation Fault\n");
                 return -1;
             }
 
             //copy memory from parent
-            memmove(mem, p->parent->_pgdirinfo.va[j], PGSIZE);
+            memmove(mem, p->parent->_pgdirinfo->va[j], PGSIZE);
         }
 
         //fill with file contents
-        else if (p->_wmapinfo.flags[i] & MAP_ANONYMOUS != MAP_ANONYMOUS)
+        else if (p->_wmapinfo->flags[i] & MAP_ANONYMOUS != MAP_ANONYMOUS)
         {
             //write contents of file to memory
-            struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+            struct file* f = p->ofile[p->_wmapinfo->fds[i]];
 
             //TODO: Finish
         }
@@ -518,23 +518,23 @@ int page_fault_handler(void)
         }
 
         //add to pgdirinfo if not already
-        int index = p->_pgdirinfo.n_upages;
-        p->_wmapinfo.n_loaded_pages[i]++;
+        int index = p->_pgdirinfo->n_upages;
+        p->_wmapinfo->n_loaded_pages[i]++;
 
         //check if already in
-        for(int j = 0; j < p->_pgdirinfo.n_upages; j++)
+        for(int j = 0; j < p->_pgdirinfo->n_upages; j++)
         {
-            if(p->_pgdirinfo.va[j] == addr)
+            if(p->_pgdirinfo->va[j] == addr)
             {
-                p->_pgdirinfo.pa[j] = V2P(mem);
+                p->_pgdirinfo->pa[j] = V2P(mem);
                 return 0;
             }
         }
 
         //add
-        p->_pgdirinfo.n_upages++;
-        p->_pgdirinfo.va[index] = addr;
-        p->_pgdirinfo.pa[index] = V2P(mem);
+        p->_pgdirinfo->n_upages++;
+        p->_pgdirinfo->va[index] = addr;
+        p->_pgdirinfo->pa[index] = V2P(mem);
 
         return 0;
       }

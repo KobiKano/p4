@@ -5,6 +5,7 @@
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
+#include "wmap.h"
 #include "spinlock.h"
 
 struct {
@@ -113,8 +114,10 @@ found:
   p->context->eip = (uint)forkret;
 
   //allocate tracking vals
-  p->_wmapinfo.total_mmaps = 0;
-  p->_pgdirinfo.n_upages = 0;
+  p->_wmapinfo = memset(p->_wmapinfo, 0, sizeof *p->_wmapinfo);
+  p->_pgdirinfo = memset(p->_pgdirinfo, 0, sizeof *p->_pgdirinfo);
+  p->_wmapinfo->total_mmaps = 0;
+  p->_pgdirinfo->n_upages = 0;
 
   return p;
 }
