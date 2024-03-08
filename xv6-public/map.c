@@ -17,6 +17,7 @@
 
 //global defs
 
+
 //helper functions
 
 /**
@@ -470,9 +471,40 @@ int page_fault_handler(void)
         addr = PGROUNDDOWN(addr);
         void* mem = (void*)kalloc();
 
-        //fill memory
-        //TODO: check flags for copy on write or file
-        if (memset(mem, 0, PGSIZE) == 0x0)
+        //check flags for copy on write
+        if (p->_wmapinfo.flags[i] & MAP_PRIVATE != MAP_PRIVATE && p->parent->pid != 1)
+        {
+            //process is child process with private mapping
+            //find address of parent mem
+            int j;
+            for (j = 0; j < p->parent->_pgdirinfo.n_upages; j++)
+            {
+                if(p->parent->_pgdirinfo.va[j] == mem)
+                {
+                    break;
+                }
+            }
+            if (j == p->parent->_pgdirinfo.n_upages)
+            {
+                cprintf("Segmentation Fault\n");
+                return -1;
+            }
+
+            //copy memory from parent
+            memmove(mem, p->parent->_pgdirinfo.va[j], PGSIZE);
+        }
+
+        //fill with file contents
+        else if (p->_wmapinfo.flags[i] & MAP_ANONYMOUS != MAP_ANONYMOUS)
+        {
+            //write contents of file to memory
+            struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+
+            //TODO: Finish
+        }
+
+        //fill with empty
+        else if (memset(mem, 0, PGSIZE) == 0x0)
         {
           cprintf("Segmentation Fault\n");
           return -1;
@@ -485,13 +517,24 @@ int page_fault_handler(void)
           return -1;
         }
 
-        //add to pgdirinfo
+        //add to pgdirinfo if not already
         int index = p->_pgdirinfo.n_upages;
         p->_wmapinfo.n_loaded_pages[i]++;
+
+        //check if already in
+        for(int j = 0; j < p->_pgdirinfo.n_upages; j++)
+        {
+            if(p->_pgdirinfo.va[j] == addr)
+            {
+                p->_pgdirinfo.pa[j] = V2P(mem);
+                return 0;
+            }
+        }
+
+        //add
         p->_pgdirinfo.n_upages++;
         p->_pgdirinfo.va[index] = addr;
         p->_pgdirinfo.pa[index] = V2P(mem);
-        p->_pgdirinfo.n_upages++;
 
         return 0;
       }
