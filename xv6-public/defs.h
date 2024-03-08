@@ -89,6 +89,8 @@ void            end_op();
 
 // map.c
 int             page_fault_handler(void);
+void            copy_mappings(struct proc* p, struct proc* np);
+void            unmap(struct proc* p);
 
 // mp.c
 extern int      ismp;

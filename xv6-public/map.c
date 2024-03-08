@@ -500,3 +500,23 @@ int page_fault_handler(void)
     cprintf("Segmentation Fault\n");
     return -1;
 }
+
+/**
+ * Copy mappings from p to np
+ * Make sure to copy memory values
+ * If shared memory map to same Physical Memory
+*/
+void copy_mappings(struct proc* p, struct proc* np)
+{
+
+}
+
+/**
+ * Unmap all memory
+ * Only umap unshared memory if child
+ * If parent unmap all memory
+*/
+void unmap(struct proc* p)
+{
+
+}

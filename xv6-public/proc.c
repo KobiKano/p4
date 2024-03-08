@@ -214,6 +214,9 @@ fork(void)
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
+  // Copy all mappings from parent to child
+  copy_mappings(curproc, np);
+
   pid = np->pid;
 
   acquire(&ptable.lock);
@@ -245,6 +248,9 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
+
+  // Unmap paged
+  unmap(curproc);
 
   begin_op();
   iput(curproc->cwd);
