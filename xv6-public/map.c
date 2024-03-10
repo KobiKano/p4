@@ -25,17 +25,19 @@
  * Add to end of array
  * skips if full
 */
-int add_mappings(struct proc* p, uint addr, int length, int flags, int fd)
+int add_mappings(struct proc* p, uint addr, int length, int a_len, int flags, int fd)
 {
     if (p->_wmapinfo.total_mmaps == MAX_WMMAP_INFO)
     {
         return -1;
     }
+    //cprintf("proc:%d, addr:%x, length:%d, a_len%d, flags:%d, fd:%d\n", p, addr, length, a_len, flags, fd);
 
     //add to mappings
     int index = p->_wmapinfo.total_mmaps;
     p->_wmapinfo.addr[index] = addr;
     p->_wmapinfo.length[index] = length;
+    p->_wmapinfo.alloc_length[index] = a_len;
     p->_wmapinfo.n_loaded_pages[index] = 0;
     p->_wmapinfo.flags[index] = flags;
     p->_wmapinfo.fds[index] = fd;
@@ -61,6 +63,7 @@ void remove_mappings(struct proc* p, int index)
         //shift next down
         p->_wmapinfo.addr[i] = p->_wmapinfo.addr[i+1];
         p->_wmapinfo.length[i] = p->_wmapinfo.length[i+1];
+        p->_wmapinfo.alloc_length[i] = p->_wmapinfo.alloc_length[i+1];
         p->_wmapinfo.n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i+1];
         p->_wmapinfo.flags[i] = p->_wmapinfo.flags[i+1];
         p->_wmapinfo.fds[i] = p->_wmapinfo.fds[i+1];
@@ -95,7 +98,7 @@ uint find_space(struct proc* p, int length)
             //check for overlap
             //check if addr start within bounds
             if (addr >= p->_wmapinfo.addr[i] && 
-            addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
             {
                 overlap = 1;
                 break;
@@ -165,6 +168,7 @@ int sys_wmap(void)
     //fetch args
     uint addr;
     int length;
+    int a_len;
     int flags;
     int fd;
     int a;
@@ -189,12 +193,12 @@ int sys_wmap(void)
     }
 
     //parse flags and check for errors
-    length = PGROUNDUP(length);
+    a_len = PGROUNDUP(length);
     if ((flags & MAP_FIXED) == MAP_FIXED)
     {
         //check for valid address bounds
         if ((addr < 0x60000000) | 
-        ((addr + (0x1000 * (length / PGSIZE))) > 0x80000000) | 
+        ((addr + (0x1000 * (a_len / PGSIZE))) > 0x80000000) | 
         (addr % PGSIZE != 0))
         {
             //error return
@@ -206,15 +210,15 @@ int sys_wmap(void)
         {
             //check if addr start within bounds
             if (addr >= proc->_wmapinfo.addr[i] && 
-            addr <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
+            addr <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
             {
                 //error return
                 return FAILED;
             }
 
             //check if addr end withing bounds
-            if ((addr + LEN_TO_PAGE(length)) >= proc->_wmapinfo.addr[i] && 
-            (addr + LEN_TO_PAGE(length)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.length[i])))
+            if ((addr + LEN_TO_PAGE(a_len)) >= proc->_wmapinfo.addr[i] && 
+            (addr + LEN_TO_PAGE(a_len)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
             {
                 //error return
                 return FAILED;
@@ -224,7 +228,7 @@ int sys_wmap(void)
     else
     {
         //find address mapping
-        if ((addr = find_space(proc, length)) == 0x0)
+        if ((addr = find_space(proc, a_len)) == 0x0)
         {
             //no address avaliable
             return FAILED;
@@ -234,7 +238,7 @@ int sys_wmap(void)
     //map pages
     int n = 0;
     uint addr_cpy = addr;
-    while (n != length)
+    while (n != a_len)
     {
         //handle physical address in trap
         if (mappages(pde, (void*)addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
@@ -249,7 +253,7 @@ int sys_wmap(void)
     }
 
     //add mapping
-    if (add_mappings(proc, addr, length, flags, fd) < 0)
+    if (add_mappings(proc, addr, length, a_len, flags, fd) < 0)
     {
         //error return
         return FAILED;
@@ -312,7 +316,7 @@ int sys_wunmap(void)
         //write from each virtual address
         uint addr_cpy = addr;
         int n = 0;
-        while (n != p->_wmapinfo.length[i])
+        while (n != p->_wmapinfo.alloc_length[i])
         {
             filewrite(f, (char*)addr_cpy, PGSIZE);
 
@@ -327,7 +331,7 @@ int sys_wunmap(void)
 
     //free physical mappings
     int n = 0;
-    while(n != p->_wmapinfo.length[i])
+    while(n != p->_wmapinfo.alloc_length[i])
     {
         pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
         kfree((char*)P2V(PTE_ADDR(*pte)));
@@ -448,6 +452,7 @@ int sys_getwmapinfo(void)
     {
         ptr->addr[i] = p->_wmapinfo.addr[i];
         ptr->length[i] = p->_wmapinfo.length[i];
+        ptr->alloc_length[i] = p->_wmapinfo.alloc_length[i];
         ptr->n_loaded_pages[i] = p->_wmapinfo.n_loaded_pages[i];
         ptr->flags[i] = p->_wmapinfo.flags[i];
         ptr->fds[i] = p->_wmapinfo.fds[i];
@@ -466,7 +471,7 @@ int page_fault_handler(uint addr)
     for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
     {
       //check if within bounds
-      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
       {
         //add to pgdir
         addr = PGROUNDDOWN(addr);

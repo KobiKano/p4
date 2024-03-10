@@ -30,6 +30,7 @@ struct wmapinfo {
     int addr[MAX_WMMAP_INFO];           // Starting address of mapping
     int length[MAX_WMMAP_INFO];         // Size of mapping
     int n_loaded_pages[MAX_WMMAP_INFO]; // Number of pages physically loaded into memory
+    int alloc_length[MAX_WMMAP_INFO];
     int flags[MAX_WMMAP_INFO];
     int fds[MAX_WMMAP_INFO];
 };
