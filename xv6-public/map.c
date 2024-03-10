@@ -151,6 +151,9 @@ uint find_space(struct proc* p, int length)
             addr = p->_wmapinfo->addr[i] + LEN_TO_PAGE(p->_wmapinfo->length[i]);
         }
     }
+
+    //defalt return
+    return 0x0;
 }
 
 
@@ -194,20 +197,22 @@ int sys_wmap(void)
     int length;
     int flags;
     int fd;
+    int a;
 
-    if (argint(0, &addr) < 0 | argint(1, &length) < 0 | argint(2, &flags) < 0 | argint(3, &fd) < 0)
+    if ((argint(0, &a) < 0) | (argint(1, &length) < 0) | (argint(2, &flags) < 0) | (argint(3, &fd) < 0))
     {
         //error occured return failiure
         return FAILED;
     }
+    addr = (uint)a;
 
     //get calling process
     struct proc* proc = myproc();
-    struct pde_t* pde = proc->pgdir;
+    pde_t* pde = proc->pgdir;
 
     //check if private or shared error in input
-    if ((flags & MAP_PRIVATE == MAP_PRIVATE && flags & MAP_SHARED == MAP_SHARED) |
-        (flags & MAP_PRIVATE != MAP_PRIVATE && flags & MAP_SHARED != MAP_SHARED))
+    if ((((flags & MAP_PRIVATE) == MAP_PRIVATE) && ((flags & MAP_SHARED) == MAP_SHARED)) |
+        (((flags & MAP_PRIVATE) != MAP_PRIVATE) && ((flags & MAP_SHARED) != MAP_SHARED)))
     {
         //error return
         return FAILED;
@@ -215,12 +220,12 @@ int sys_wmap(void)
 
     //parse flags and check for errors
     length = PGROUNDUP(length);
-    if (flags & MAP_FIXED == MAP_FIXED)
+    if ((flags & MAP_FIXED) == MAP_FIXED)
     {
         //check for valid address bounds
-        if (addr < 0x60000000 | 
-        (addr + (0x1000 * (length / PGSIZE))) > 0x80000000 | 
-        addr % PGSIZE != 0)
+        if ((addr < 0x60000000) | 
+        ((addr + (0x1000 * (length / PGSIZE))) > 0x80000000) | 
+        (addr % PGSIZE != 0))
         {
             //error return
             return FAILED;
@@ -249,7 +254,7 @@ int sys_wmap(void)
     else
     {
         //find address mapping
-        if (addr = find_space(proc, length) == 0x0)
+        if ((addr = find_space(proc, length)) == 0x0)
         {
             //no address avaliable
             return FAILED;
@@ -262,7 +267,7 @@ int sys_wmap(void)
     while (n != length)
     {
         //handle physical address in trap
-        if (mappages(pde, addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
+        if (mappages(pde, (void*)addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
         {
             //error return
             return FAILED;
@@ -293,11 +298,13 @@ int sys_wunmap(void)
 {
     //get address
     uint addr;
-    if (argint(0, &addr) < 0)
+    int a;
+    if (argint(0, &a) < 0)
     {
         //error return
         return FAILED;
     }
+    addr = (uint)a;
 
     //get process
     struct proc* p = myproc();
@@ -321,8 +328,8 @@ int sys_wunmap(void)
     }
 
     //check if file backed
-    if ((p->_wmapinfo->flags[i] & MAP_ANONYMOUS == MAP_ANONYMOUS) && 
-    (p->_wmapinfo->flags[i] & MAP_SHARED == MAP_SHARED))
+    if (((p->_wmapinfo->flags[i] & MAP_ANONYMOUS) == MAP_ANONYMOUS) && 
+    ((p->_wmapinfo->flags[i] & MAP_SHARED) == MAP_SHARED))
     {
         //write to file
         struct file* f;
@@ -352,7 +359,7 @@ int sys_wunmap(void)
     int n = 0;
     while(n != p->_wmapinfo->length[i])
     {
-        pte_t* pte = walkpgdir(p->pgdir, addr, 0);
+        pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
         kfree((char*)P2V(PTE_ADDR(*pte)));
         *pte = 0;
         remove_pgdir(p, addr);
@@ -377,7 +384,8 @@ int sys_wunmap(void)
 */
 int sys_wremap(void)
 {
-
+    //default return
+    return SUCCESS;
 }
 
 /**
@@ -397,11 +405,13 @@ int sys_getpgdirinfo(void)
 {
     //get pointer
     struct pgdirinfo* ptr;
-    if (argptr(0, &ptr, sizeof(struct pgdirinfo)) < 0)
+    char* _ptr;
+    if (argptr(0, &_ptr, sizeof(struct pgdirinfo)) < 0)
     {
         //error return
         return FAILED;
     }
+    ptr = (struct pgdirinfo*)_ptr;
 
     //copy values
     struct proc* p = myproc();
@@ -433,11 +443,13 @@ int sys_getwmapinfo(void)
 {
     //get pointer
     struct wmapinfo* ptr;
-    if (argptr(0, &ptr, sizeof(struct wmapinfo)) < 0)
+    char* _ptr;
+    if (argptr(0, &_ptr, sizeof(struct wmapinfo)) < 0)
     {
         //error return
         return FAILED;
     }
+    ptr = (struct wmapinfo*)_ptr;
 
     //copy values
     struct proc* p = myproc();
@@ -455,12 +467,11 @@ int sys_getwmapinfo(void)
     return SUCCESS;
 }
 
-int page_fault_handler(void)
+int page_fault_handler(uint addr)
 {
     //check if mapped
-    uint addr = rcr2();
     struct proc* p = myproc();
-    char success = 0;
+    
     //check all mappings
     for(int i = 0; i < p->_wmapinfo->total_mmaps; i++)
     {
@@ -472,14 +483,14 @@ int page_fault_handler(void)
         void* mem = (void*)kalloc();
 
         //check flags for copy on write
-        if (p->_wmapinfo->flags[i] & MAP_PRIVATE != MAP_PRIVATE && p->parent->pid != 1)
+        if (((p->_wmapinfo->flags[i] & MAP_PRIVATE) != MAP_PRIVATE) && (p->parent->pid != 1))
         {
             //process is child process with private mapping
             //find address of parent mem
             int j;
             for (j = 0; j < p->parent->_pgdirinfo->n_upages; j++)
             {
-                if(p->parent->_pgdirinfo->va[j] == mem)
+                if(p->parent->_pgdirinfo->va[j] == (uint)mem)
                 {
                     break;
                 }
@@ -491,14 +502,14 @@ int page_fault_handler(void)
             }
 
             //copy memory from parent
-            memmove(mem, p->parent->_pgdirinfo->va[j], PGSIZE);
+            memmove(mem, (const void*)p->parent->_pgdirinfo->va[j], PGSIZE);
         }
 
         //fill with file contents
-        else if (p->_wmapinfo->flags[i] & MAP_ANONYMOUS != MAP_ANONYMOUS)
+        else if ((p->_wmapinfo->flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
         {
             //write contents of file to memory
-            struct file* f = p->ofile[p->_wmapinfo->fds[i]];
+            //struct file* f = p->ofile[p->_wmapinfo->fds[i]];
 
             //TODO: Finish
         }
@@ -511,7 +522,7 @@ int page_fault_handler(void)
         }
 
         //allocate
-        if (mappages(p->pgdir, addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+        if (mappages(p->pgdir, (void*)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
         {
           cprintf("Segmentation Fault\n");
           return -1;

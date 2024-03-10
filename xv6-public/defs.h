@@ -88,7 +88,7 @@ void            begin_op();
 void            end_op();
 
 // map.c
-int             page_fault_handler(void);
+int             page_fault_handler(uint addr);
 void            copy_mappings(struct proc* p, struct proc* np);
 void            unmap(struct proc* p);
 

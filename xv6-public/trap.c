@@ -78,7 +78,8 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-    if (page_fault_handler() < 0)
+    uint addr = rcr2();
+    if (page_fault_handler(addr) < 0)
     {
       myproc()->killed = 1;
     }
