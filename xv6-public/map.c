@@ -480,6 +480,7 @@ int page_fault_handler(uint addr)
         {
             //process is child process with private mapping
             //find address of parent mem
+            //TODO: FINISH (COPY MEM FROM PARENT TO NEW CHILD PHYSICAL ADDRESS)
             
         }
 
@@ -489,7 +490,7 @@ int page_fault_handler(uint addr)
             //write contents of file to memory
             //struct file* f = p->ofile[p->_wmapinfo.fds[i]];
 
-            //TODO: Finish
+            //TODO: FINISH (FILL PAGE WITH FILE CONTENTS)
         }
 
         //fill with empty
@@ -520,6 +521,7 @@ int page_fault_handler(uint addr)
  * Copy mappings from p to np
  * Make sure to copy memory values
  * If shared memory map to same Physical Memory
+ * Called from proc.c fork() function
 */
 void copy_mappings(struct proc* p, struct proc* np)
 {
@@ -530,6 +532,7 @@ void copy_mappings(struct proc* p, struct proc* np)
  * Unmap all memory
  * Only umap unshared memory if child
  * If parent unmap all memory
+ * Called from proc.c exit() function
 */
 void unmap(struct proc* p)
 {
