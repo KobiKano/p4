@@ -115,7 +115,6 @@ found:
 
   //allocate tracking vals
   p->_wmapinfo.total_mmaps = 0;
-  p->_pgdirinfo.n_upages = 0;
 
   return p;
 }

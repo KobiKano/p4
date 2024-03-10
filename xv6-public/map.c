@@ -71,36 +71,6 @@ void remove_mappings(struct proc* p, int index)
 }
 
 /**
- * Remove entry from pgdirinfo
-*/
-void remove_pgdir(struct proc* p, uint addr)
-{
-    //find index
-    int i;
-    for (i = 0; i < p->_pgdirinfo.n_upages; i++)
-    {
-        if (addr == p->_pgdirinfo.pa[i])
-        {
-            break;
-        }
-    }
-
-    //check if not found
-    if (i == p->_pgdirinfo.n_upages)
-    {
-        return;
-    }
-
-    //remove value and shift values
-    for (int j = i; j < p->_pgdirinfo.n_upages - 1; j++)
-    {
-        p->_pgdirinfo.pa[j] = p->_pgdirinfo.pa[j+1];
-        p->_pgdirinfo.va[j] = p->_pgdirinfo.va[j+1];
-    }
-    p->_pgdirinfo.n_upages--;
-}
-
-/**
  * Find space for address
  * Simple linear search where if overlap found, address set to page after overlapped page
  * continue while loop on new addr
@@ -362,7 +332,6 @@ int sys_wunmap(void)
         pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
         kfree((char*)P2V(PTE_ADDR(*pte)));
         *pte = 0;
-        remove_pgdir(p, addr);
 
         n += PGSIZE;
         addr += 0x1000;
@@ -413,17 +382,38 @@ int sys_getpgdirinfo(void)
     }
     ptr = (struct pgdirinfo*)_ptr;
 
-    //copy values
-    struct proc* p = myproc();
-    ptr->n_upages = p->_pgdirinfo.n_upages;
-    for (int i = 0; i < ptr->n_upages; i++)
+    //go through entire table
+    pte_t* pgdir = myproc()->pgdir;
+
+    if(pgdir != 0x0)
     {
-        ptr->pa[i] = p->_pgdirinfo.pa[i];
-        ptr->va[i] = p->_pgdirinfo.va[i];
+        //start scanning
+        ptr->n_upages = 0;
+
+        for (int i = 0; i < NPDENTRIES; i++)
+        {
+            //check if page table in directory
+            if ((pgdir[i] & PTE_P) == PTE_P)
+            {
+                pte_t* pgtab = (pte_t*)P2V(PTE_ADDR(pgdir[i]));
+                for (int j = 0; j < NPDENTRIES; j++)
+                {
+                    //check if valid entry and user entry
+                    pte_t entry = pgtab[j];
+                    if ((entry != 0) && ((entry & PTE_P) == PTE_P) && ((entry & PTE_U) == PTE_U))
+                    {
+                        ptr->pa[ptr->n_upages] = PTE_ADDR(entry);
+                        ptr->va[ptr->n_upages] = PGADDR(i, j, 0);
+                        ptr->n_upages++;
+                    }
+                }
+            }
+        }
+        return SUCCESS;
     }
 
     //default return
-    return SUCCESS;
+    return FAILED;
 }
 
 /**
@@ -487,22 +477,7 @@ int page_fault_handler(uint addr)
         {
             //process is child process with private mapping
             //find address of parent mem
-            int j;
-            for (j = 0; j < p->parent->_pgdirinfo.n_upages; j++)
-            {
-                if(p->parent->_pgdirinfo.va[j] == (uint)mem)
-                {
-                    break;
-                }
-            }
-            if (j == p->parent->_pgdirinfo.n_upages)
-            {
-                cprintf("Segmentation Fault\n");
-                return -1;
-            }
-
-            //copy memory from parent
-            memmove(mem, (const void*)p->parent->_pgdirinfo.va[j], PGSIZE);
+            
         }
 
         //fill with file contents
@@ -527,25 +502,6 @@ int page_fault_handler(uint addr)
           cprintf("Segmentation Fault\n");
           return -1;
         }
-
-        //add to pgdirinfo if not already
-        int index = p->_pgdirinfo.n_upages;
-        p->_wmapinfo.n_loaded_pages[i]++;
-
-        //check if already in
-        for(int j = 0; j < p->_pgdirinfo.n_upages; j++)
-        {
-            if(p->_pgdirinfo.va[j] == addr)
-            {
-                p->_pgdirinfo.pa[j] = V2P(mem);
-                return 0;
-            }
-        }
-
-        //add
-        p->_pgdirinfo.n_upages++;
-        p->_pgdirinfo.va[index] = addr;
-        p->_pgdirinfo.pa[index] = V2P(mem);
 
         return 0;
       }

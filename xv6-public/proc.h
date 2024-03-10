@@ -51,7 +51,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  struct pgdirinfo _pgdirinfo; // information about page directory
   struct wmapinfo  _wmapinfo;  // information about mappings
 };
 
