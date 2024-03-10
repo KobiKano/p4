@@ -114,6 +114,7 @@ int within_bounds(struct proc* proc, int i, uint addr, int a_len)
 */
 uint find_space(struct proc* p, int length)
 {
+    //cprintf("Finding addr\n");
     uint addr = 0x60000000;
 
     //find addr
@@ -145,7 +146,7 @@ uint find_space(struct proc* p, int length)
         else
         {
             //add change addr to end of overlapped value
-            addr = p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i]);
+            addr = p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i]);
         }
     }
 
