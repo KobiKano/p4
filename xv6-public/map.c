@@ -207,7 +207,6 @@ int sys_wmap(void)
 
     //get calling process
     struct proc* proc = myproc();
-    pde_t* pde = proc->pgdir;
 
     //check if private or shared error in input
     if ((((flags & MAP_PRIVATE) == MAP_PRIVATE) && ((flags & MAP_SHARED) == MAP_SHARED)) |
@@ -248,23 +247,6 @@ int sys_wmap(void)
             //no address avaliable
             return FAILED;
         }
-    }
-
-    //map pages
-    int n = 0;
-    uint addr_cpy = addr;
-    while (n != a_len)
-    {
-        //handle physical address in trap
-        if (mappages(pde, (void*)addr_cpy, 4096, 0x0, PTE_W | PTE_U) < 0)
-        {
-            //error return
-            return FAILED;
-        }
-
-        //incrememnt values
-        n += PGSIZE;
-        addr_cpy += 0x1000;
     }
 
     //add mapping
@@ -479,6 +461,7 @@ int sys_getwmapinfo(void)
 
 int page_fault_handler(uint addr)
 {
+    //cprintf("Page Fault Handler\n");
     //check if mapped
     struct proc* p = myproc();
     
@@ -523,6 +506,8 @@ int page_fault_handler(uint addr)
           return -1;
         }
 
+        //increase mapping allocs and return
+        p->_wmapinfo.n_loaded_pages[i]++;
         return 0;
       }
     }

@@ -78,11 +78,13 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
+    //cprintf("T_PGFLT\n");
     uint addr = rcr2();
     if (page_fault_handler(addr) < 0)
     {
       myproc()->killed = 1;
     }
+    lapiceoi();
     break;
 
   //PAGEBREAK: 13
