@@ -74,6 +74,40 @@ void remove_mappings(struct proc* p, int index)
 }
 
 /**
+ * Given a process, and index i to mapping info,
+ * Compute if addr with a_len is overlapped with existsing
+*/
+int within_bounds(struct proc* proc, int i, uint addr, int a_len)
+{
+    //check if addr start within bounds
+    if (addr >= proc->_wmapinfo.addr[i] && 
+    addr < (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
+    {
+        //error return
+        return -1;
+    }
+
+    //check if addr end withing bounds
+    if ((addr + LEN_TO_PAGE(a_len)) >= proc->_wmapinfo.addr[i] && 
+    (addr + LEN_TO_PAGE(a_len)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
+    {
+        //error return
+        return -1;
+    }
+
+    //check if covers bounds
+    if ((addr <= proc->_wmapinfo.addr[i]) && 
+    ((addr + LEN_TO_PAGE(a_len)) >= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i]))))
+    {
+        //error return
+        return -1;
+    }
+
+    //default return
+    return 0;
+}
+
+/**
  * Find space for address
  * Simple linear search where if overlap found, address set to page after overlapped page
  * continue while loop on new addr
@@ -96,17 +130,7 @@ uint find_space(struct proc* p, int length)
         for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
         {
             //check for overlap
-            //check if addr start within bounds
-            if (addr >= p->_wmapinfo.addr[i] && 
-            addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
-            {
-                overlap = 1;
-                break;
-            }
-
-            //check if addr end withing bounds
-            if ((addr + LEN_TO_PAGE(length)) >= p->_wmapinfo.addr[i] && 
-            (addr + LEN_TO_PAGE(length)) <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.length[i])))
+            if (within_bounds(p, i, addr, length) < 0)
             {
                 overlap = 1;
                 break;
@@ -208,17 +232,7 @@ int sys_wmap(void)
         //check if region avaliable
         for (int i = 0; i < proc->_wmapinfo.total_mmaps; i++)
         {
-            //check if addr start within bounds
-            if (addr >= proc->_wmapinfo.addr[i] && 
-            addr <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
-            {
-                //error return
-                return FAILED;
-            }
-
-            //check if addr end withing bounds
-            if ((addr + LEN_TO_PAGE(a_len)) >= proc->_wmapinfo.addr[i] && 
-            (addr + LEN_TO_PAGE(a_len)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
+            if (within_bounds(proc, i, addr, a_len) < 0)
             {
                 //error return
                 return FAILED;
