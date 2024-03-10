@@ -1,3 +1,6 @@
+#ifndef WMAP_H
+#define WMAP_H
+
 #include "types.h"
 
 // Flags for wmap
@@ -30,3 +33,5 @@ struct wmapinfo {
     int flags[MAX_WMMAP_INFO];
     int fds[MAX_WMMAP_INFO];
 };
+
+#endif

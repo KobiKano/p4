@@ -3,6 +3,8 @@ struct context;
 struct file;
 struct inode;
 struct pipe;
+struct pgdirinfo;
+struct wmapinfo;
 struct proc;
 struct rtcdate;
 struct spinlock;
