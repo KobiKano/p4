@@ -501,16 +501,16 @@ int page_fault_handler(uint addr)
             }
 
             if (parent_mapping_index != -1){
-            // Determine the physical address of the parent's memory corresponding to addr
-            uint parent_physical_address = PTE_ADDR(walkpgdir(parent_proc->pgdir, (void *)addr, 0)[0]);
-            void* parent_mem = P2V(parent_physical_address);
-            // Copy the content of the parent's memory to the newly allocated memory in the child process
-            memmove(mem, parent_mem, PGSIZE);
-            // Update the page table entry of the child process to make the memory writable
-            if (mappages(p->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0){
-                cprintf("Failed to map memory\n");
-                kfree(mem);
-                return -1;
+                // Determine the physical address of the parent's memory corresponding to addr
+                uint parent_physical_address = PTE_ADDR(walkpgdir(parent_proc->pgdir, (void *)addr, 0)[0]);
+                void* parent_mem = P2V(parent_physical_address);
+                // Copy the content of the parent's memory to the newly allocated memory in the child process
+                memmove(mem, parent_mem, PGSIZE);
+                // Update the page table entry of the child process to make the memory writable
+                if (mappages(p->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0){
+                    cprintf("Failed to map memory\n");
+                    kfree(mem);
+                    return -1;
                 }
             }    
         }
@@ -518,10 +518,25 @@ int page_fault_handler(uint addr)
         //fill with file contents
         else if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
         {
+            //find offset within file
+            uint a_start = p->_wmapinfo.addr[i];
+            int off = 0;
+            for (int j = 0; j < p->_wmapinfo.alloc_length[i]; j++)
+            {
+                if (a_start == addr)
+                {
+                    //match found, exit
+                    break;
+                }
+                //else increment vals
+                off += PGSIZE;
+                a_start += 0x1000;
+            }
+
             //write contents of file to memory
             struct file* f = p->ofile[p->_wmapinfo.fds[i]];
             ilock(f->ip);
-            int bytesRead = readi(f->ip, (uint)mem, 0, PGSIZE);
+            int bytesRead = readi(f->ip, (char*)mem, off, PGSIZE);
             iunlock(f->ip);
             if (bytesRead < 0)
             {
@@ -544,7 +559,6 @@ int page_fault_handler(uint addr)
                 // Zero-fill the remaining part of the page
                 memset(mem + bytesRead, 0, remainingBytes);
             }
-            //TODO: FINISH (FILL PAGE WITH FILE CONTENTS)
         }
 
         //fill with empty
@@ -579,12 +593,14 @@ int page_fault_handler(uint addr)
 */
 void copy_mappings(struct proc* p, struct proc* np)
 {
+    //TODO: FIX
+
     //go through all mappings of the parent process
     for(int i=0;i<p->_wmapinfo.total_mmaps;++i){
         void *mem = kalloc();
         if (mem == 0){
             cprintf("Kalloc error\n");
-            return -1;
+            return;
         }
 
         //check if mapping is shared.
