@@ -11,6 +11,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include <sys/types.h>
 
 //macro defs
 #define LEN_TO_PAGE(va)   (0x1000 * ((int)(va) / PGSIZE))
@@ -475,21 +476,74 @@ int page_fault_handler(uint addr)
         addr = PGROUNDDOWN(addr);
         void* mem = (void*)kalloc();
 
+        //error checking for kalloc success.
+        if (mem == 0){
+            cprintf("Kalloc error\n");
+            return -1;
+        }
         //check flags for copy on write
-        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) != MAP_PRIVATE) && (p->parent->pid != 1))
+        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE) && (p->parent->pid != 1))
         {
             //process is child process with private mapping
             //find address of parent mem
             //TODO: FINISH (COPY MEM FROM PARENT TO NEW CHILD PHYSICAL ADDRESS)
-            
+            struct proc* parent_proc = p->parent;
+            // Find the corresponding mapping in the parent process
+            int parent_mapping_index = -1;
+            for (int j = 0; j < parent_proc->_wmapinfo.total_mmaps; j++)
+            {
+                if (addr >= parent_proc->_wmapinfo.addr[j] &&
+                addr <= (parent_proc->_wmapinfo.addr[j] + LEN_TO_PAGE(parent_proc->_wmapinfo.alloc_length[j])))
+            {
+                parent_mapping_index = j;
+                     break;
+            }
+            }
+
+            if (parent_mapping_index != -1){
+            // Determine the physical address of the parent's memory corresponding to addr
+            uint parent_physical_address = PTE_ADDR(walkpgdir(parent_proc->pgdir, (void *)addr, 0)[0]);
+            void* parent_mem = P2V(parent_physical_address);
+            // Copy the content of the parent's memory to the newly allocated memory in the child process
+            memmove(mem, parent_mem, PGSIZE);
+            // Update the page table entry of the child process to make the memory writable
+            if (mappages(p->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0){
+                cprintf("Failed to map memory\n");
+                kfree(mem);
+                return -1;
+                }
+            }    
         }
 
         //fill with file contents
         else if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
         {
             //write contents of file to memory
-            //struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+            struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+            ilock(f->ip);
+            int bytesRead = readi(f->ip, (uint)mem, 0, PGSIZE);
+            iunlock(f->ip);
+            if (bytesRead < 0)
+            {
+                cprintf("Failed to read file\n");
+                kfree(mem); // Free the allocated memory
+                return FAILED;  // Return an error code
+            }
 
+            else if (bytesRead == 0)
+            {
+                cprintf("End of file reached\n");
+                kfree(mem); // Free the allocated memory
+                return FAILED;  // Return an error code
+            }
+
+            //filing the rest with 0s
+            if (bytesRead < PGSIZE)
+            {
+                int remainingBytes = PGSIZE - bytesRead;
+                // Zero-fill the remaining part of the page
+                memset(mem + bytesRead, 0, remainingBytes);
+            }
             //TODO: FINISH (FILL PAGE WITH FILE CONTENTS)
         }
 
@@ -525,6 +579,33 @@ int page_fault_handler(uint addr)
 */
 void copy_mappings(struct proc* p, struct proc* np)
 {
+    //go through all mappings of the parent process
+    for(int i=0;i<p->_wmapinfo.total_mmaps;++i){
+        void *mem = kalloc();
+        if (mem == 0){
+            cprintf("Kalloc error\n");
+            return -1;
+        }
+
+        //check if mapping is shared.
+        if ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED){
+            //move the child process, to the same physical address as parent
+            //memmove(mem, (void*)p->_wmapinfo.addr[i], PGSIZE);
+        }
+        else{
+            //if mapping private
+            //zero initialize the mem
+            memset(mem, 0, PGSIZE);
+        }
+        if (mappages(np->pgdir, (void*)p->_wmapinfo.addr[i], PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+        {
+            //mapping failure
+            cprintf("Mapping failure\n");
+            kfree(mem); 
+            return; 
+        }
+        np->_wmapinfo.n_loaded_pages[i]++;
+    }
 
 }
 
