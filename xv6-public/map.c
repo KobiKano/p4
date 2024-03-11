@@ -462,7 +462,7 @@ int sys_getwmapinfo(void)
 
 int page_fault_handler(uint addr)
 {
-    //cprintf("Page Fault Handler\n");
+    cprintf("Page Fault Handler\n");
     //check if mapped
     struct proc* p = myproc();
     
@@ -482,11 +482,11 @@ int page_fault_handler(uint addr)
             return -1;
         }
         //check flags for copy on write
-        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE) && (p->parent->pid != 1))
+        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE) && (p->parent != 0x0) && ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) == MAP_ANONYMOUS))
         {
+            cprintf("copy on write\n");
             //process is child process with private mapping
             //find address of parent mem
-            //TODO: FINISH (COPY MEM FROM PARENT TO NEW CHILD PHYSICAL ADDRESS)
             struct proc* parent_proc = p->parent;
             // Find the corresponding mapping in the parent process
             int parent_mapping_index = -1;
@@ -518,10 +518,11 @@ int page_fault_handler(uint addr)
         //fill with file contents
         else if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
         {
+            cprintf("write from file\n");
             //find offset within file
             uint a_start = p->_wmapinfo.addr[i];
             int off = 0;
-            for (int j = 0; j < p->_wmapinfo.alloc_length[i]; j++)
+            while (off < p->_wmapinfo.alloc_length[i])
             {
                 if (a_start == addr)
                 {
@@ -535,6 +536,7 @@ int page_fault_handler(uint addr)
 
             //write contents of file to memory
             struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+            cprintf("offset:%d\n", off);
             ilock(f->ip);
             int bytesRead = readi(f->ip, (char*)mem, off, PGSIZE);
             iunlock(f->ip);
@@ -564,8 +566,8 @@ int page_fault_handler(uint addr)
         //fill with empty
         else if (memset(mem, 0, PGSIZE) == 0x0)
         {
-          cprintf("Segmentation Fault\n");
-          return -1;
+            cprintf("Segmentation Fault\n");
+            return -1;
         }
 
         //allocate
