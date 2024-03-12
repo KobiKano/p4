@@ -18,7 +18,6 @@
 
 //global defs
 
-
 //helper functions
 
 /**
@@ -462,7 +461,7 @@ int sys_getwmapinfo(void)
 
 int page_fault_handler(uint addr)
 {
-    cprintf("Page Fault Handler\n");
+    //cprintf("Page Fault Handler\n");
     //check if mapped
     struct proc* p = myproc();
     
@@ -470,8 +469,9 @@ int page_fault_handler(uint addr)
     for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
     {
       //check if within bounds
-      if(addr >= p->_wmapinfo.addr[i] && addr <= (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
+      if(addr >= p->_wmapinfo.addr[i] && addr < (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
       {
+        char success = 0;
         //add to pgdir
         addr = PGROUNDDOWN(addr);
         void* mem = (void*)kalloc();
@@ -481,44 +481,43 @@ int page_fault_handler(uint addr)
             cprintf("Kalloc error\n");
             return -1;
         }
+
         //check flags for copy on write
-        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE) && (p->parent != 0x0) && ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) == MAP_ANONYMOUS))
+        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE))
         {
-            cprintf("copy on write\n");
-            //process is child process with private mapping
             //find address of parent mem
             struct proc* parent_proc = p->parent;
-            // Find the corresponding mapping in the parent process
+            // check if parent has same mappings
             int parent_mapping_index = -1;
             for (int j = 0; j < parent_proc->_wmapinfo.total_mmaps; j++)
             {
                 if (addr >= parent_proc->_wmapinfo.addr[j] &&
-                addr <= (parent_proc->_wmapinfo.addr[j] + LEN_TO_PAGE(parent_proc->_wmapinfo.alloc_length[j])))
-            {
-                parent_mapping_index = j;
-                     break;
-            }
+                addr < (parent_proc->_wmapinfo.addr[j] + LEN_TO_PAGE(parent_proc->_wmapinfo.alloc_length[j])))
+                {
+                    //overlap found
+                    parent_mapping_index = j;
+                    break;
+                }
             }
 
             if (parent_mapping_index != -1){
+                //need to copy on write here
+                //cprintf("copy on write\n");
                 // Determine the physical address of the parent's memory corresponding to addr
                 uint parent_physical_address = PTE_ADDR(walkpgdir(parent_proc->pgdir, (void *)addr, 0)[0]);
                 void* parent_mem = P2V(parent_physical_address);
                 // Copy the content of the parent's memory to the newly allocated memory in the child process
                 memmove(mem, parent_mem, PGSIZE);
-                // Update the page table entry of the child process to make the memory writable
-                if (mappages(p->pgdir, (void *)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0){
-                    cprintf("Failed to map memory\n");
-                    kfree(mem);
-                    return -1;
-                }
-            }    
+                success = 1;
+            }
+
+            //else continue
         }
 
         //fill with file contents
-        else if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
+        if (((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS) && (success != 1))
         {
-            cprintf("write from file\n");
+            //cprintf("write from file\n");
             //find offset within file
             uint a_start = p->_wmapinfo.addr[i];
             int off = 0;
@@ -536,7 +535,6 @@ int page_fault_handler(uint addr)
 
             //write contents of file to memory
             struct file* f = p->ofile[p->_wmapinfo.fds[i]];
-            cprintf("offset:%d\n", off);
             ilock(f->ip);
             int bytesRead = readi(f->ip, (char*)mem, off, PGSIZE);
             iunlock(f->ip);
@@ -544,14 +542,14 @@ int page_fault_handler(uint addr)
             {
                 cprintf("Failed to read file\n");
                 kfree(mem); // Free the allocated memory
-                return FAILED;  // Return an error code
+                return -1;  // Return an error code
             }
 
             else if (bytesRead == 0)
             {
                 cprintf("End of file reached\n");
                 kfree(mem); // Free the allocated memory
-                return FAILED;  // Return an error code
+                return -1;  // Return an error code
             }
 
             //filing the rest with 0s
@@ -561,12 +559,15 @@ int page_fault_handler(uint addr)
                 // Zero-fill the remaining part of the page
                 memset(mem + bytesRead, 0, remainingBytes);
             }
+
+            success = 1;
         }
 
         //fill with empty
-        else if (memset(mem, 0, PGSIZE) == 0x0)
+        if ((success != 1) && (memset(mem, 0, PGSIZE) == 0x0))
         {
             cprintf("Segmentation Fault\n");
+            kfree(mem);
             return -1;
         }
 
@@ -574,6 +575,7 @@ int page_fault_handler(uint addr)
         if (mappages(p->pgdir, (void*)addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
         {
           cprintf("Segmentation Fault\n");
+          kfree(mem);
           return -1;
         }
 
