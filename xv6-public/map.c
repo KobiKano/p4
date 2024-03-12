@@ -355,6 +355,50 @@ int sys_wunmap(void)
 */
 int sys_wremap(void)
 {
+    uint oldaddr;
+    int oldsize, newsize, flags;
+    if (argint(0, (int *)&oldaddr) < 0 || argint(1, &oldsize) < 0 ||
+        argint(2, &newsize) < 0 || argint(3, &flags) < 0){
+        return FAILED;
+    }
+    // Check if oldaddr is page aligned and within valid range
+    if (oldaddr % PGSIZE != 0 || oldaddr < 0x60000000 || oldaddr >= KERNBASE) {
+        return FAILED;
+    }
+    // Check if newsize is greater than 0
+    if (newsize <= 0) {
+        return FAILED;
+    }
+    // Get current process
+    struct proc *p = myproc();
+
+    // Find the mapping corresponding to oldaddr
+    int mapping_index = -1;
+    for (int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    {
+        if (oldaddr == p->_wmapinfo.addr[i])
+        {
+            mapping_index = i;
+            break;
+        }
+    }
+    // If mapping not found, return failure
+    if (mapping_index == -1){
+        return FAILED;
+    }
+
+    if(flags==0){
+        //resizing in place
+        if (newsize <= oldsize) {
+            // Update the length of the mapping
+            p->_wmapinfo.length[mapping_index] = newsize;
+            return oldaddr; // Return the original address to indicate success
+        } else {
+            // Not enough space to grow the mapping in place, return failure
+            return FAILED;
+        }
+        
+    }
     //default return
     return SUCCESS;
 }
