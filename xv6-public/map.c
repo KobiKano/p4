@@ -89,7 +89,7 @@ int within_bounds(struct proc* proc, int i, uint addr, int a_len)
     }
 
     //check if addr end withing bounds
-    if ((addr + LEN_TO_PAGE(a_len)) >= proc->_wmapinfo.addr[i] && 
+    if ((addr + LEN_TO_PAGE(a_len)) > proc->_wmapinfo.addr[i] && 
     (addr + LEN_TO_PAGE(a_len)) <= (proc->_wmapinfo.addr[i] + LEN_TO_PAGE(proc->_wmapinfo.alloc_length[i])))
     {
         //error return
@@ -562,6 +562,7 @@ int sys_wremap(void)
         //check if moving allowed
         else if ((flags & MREMAP_MAYMOVE) == MREMAP_MAYMOVE)
         {
+            //cprintf("move\n");
             //find moveable addr
             uint n_addr = find_space(p, PGROUNDUP(newsize));
             if (n_addr == 0x0)
@@ -577,24 +578,28 @@ int sys_wremap(void)
             uint temp_addr = n_addr;
             while (n != p->_wmapinfo.alloc_length[mapping_index])
             {
-                pte_t* pte = walkpgdir(p->pgdir, (const void*)temp_addr, 0);
+                //cprintf("remap\n");
+                pte_t* pte = walkpgdir(p->pgdir, (const void*)oldaddr, 0);
+                //cprintf("*pte:%d   pte:%d    temp_addr:%x\n", *pte, pte, temp_addr);
 
                 //check if page allocated
                 if ((*pte & PTE_P) == PTE_P)
                 {
                     //remap page
-                    if (mappages(p->pgdir, (void*)temp_addr, PGSIZE, V2P(PTE_ADDR(*pte)), PTE_U | PTE_W) < 0)
+                    if (mappages(p->pgdir, (void*)temp_addr, PGSIZE, PTE_ADDR(*pte), PTE_U | PTE_W) < 0)
                     {
                         //error return
                         //cprintf("5\n");
                         return FAILED;
                     }
+
+                    *pte = 0;
                 }
 
                 //increment
                 temp_addr += 0x1000;
+                oldaddr += 0x1000;
                 n += PGSIZE;
-                *pte = 0;
             }
 
             //change mapping info
@@ -724,7 +729,7 @@ int page_fault_handler(uint addr)
     for(int i = 0; i < p->_wmapinfo.total_mmaps; i++)
     {
       //check if within bounds
-      if(addr >= p->_wmapinfo.addr[i] && addr < (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
+      if((addr >= p->_wmapinfo.addr[i]) && (addr < (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i]))))
       {
         //add to pgdir
         addr = PGROUNDDOWN(addr);
