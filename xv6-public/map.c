@@ -58,6 +58,7 @@ void remove_mappings(struct proc* p, int index)
     }
 
     //remove value
+    //cprintf("start remove\n");
     for (int i = index; i < p->_wmapinfo.total_mmaps - 1; i++)
     {
         //shift next down
@@ -267,12 +268,14 @@ int sys_wmap(void)
 */
 int sys_wunmap(void)
 {
+    //cprintf("wunmap\n");
     //get address
     uint addr;
     int a;
     if (argint(0, &a) < 0)
     {
         //error return
+        //cprintf("0\n");
         return FAILED;
     }
     addr = (uint)a;
@@ -280,12 +283,13 @@ int sys_wunmap(void)
     //get process
     struct proc* p = myproc();
 
-    //find address to map
+    //find address to unmap
     int i;
     for (i = 0; i < p->_wmapinfo.total_mmaps; i++)
     {
         if (addr == p->_wmapinfo.addr[i])
         {
+            //cprintf("index:%d\n", i);
             //match found
             break;
         }
@@ -294,12 +298,14 @@ int sys_wunmap(void)
     //check if map not found
     if (i == p->_wmapinfo.total_mmaps)
     {
+        //cprintf("index(fail):%d\n", i);
         //error return
+        //cprintf("1\n");
         return FAILED;
     }
 
     //check if file backed
-    if (((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) == MAP_ANONYMOUS) && 
+    if (((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS) && 
     ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED))
     {
         //write to file
@@ -307,6 +313,7 @@ int sys_wunmap(void)
         if(p->_wmapinfo.fds[i] < 0 || p->_wmapinfo.fds[i] >= NOFILE || (f=myproc()->ofile[p->_wmapinfo.fds[i]]) == 0)
         {
             //error return
+            //cprintf("2\n");
             return FAILED;
         }
         
@@ -324,15 +331,24 @@ int sys_wunmap(void)
     }
 
     //remove mapping
+    //cprintf("remove_mappings\n");
     remove_mappings(p, i);
 
     //free physical mappings
+    //cprintf("remove physical\n");
     int n = 0;
     while(n != p->_wmapinfo.alloc_length[i])
     {
+        //cprintf("addr:%x   n:%d   len:%d\n", addr, n, p->_wmapinfo.alloc_length[i]);
         pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
-        kfree((char*)P2V(PTE_ADDR(*pte)));
-        *pte = 0;
+
+        //check if entry alloc'd
+        if (pte != 0x0)
+        {
+            uint pa = PTE_ADDR(pte[0]);
+            kfree(P2V(pa));
+            *pte = 0;
+        }
 
         n += PGSIZE;
         addr += 0x1000;
