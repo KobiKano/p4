@@ -238,6 +238,9 @@ exit(void)
   struct proc *p;
   int fd;
 
+  // Unmap pages
+  unmap(curproc);
+
   if(curproc == initproc)
     panic("init exiting");
 
@@ -248,9 +251,6 @@ exit(void)
       curproc->ofile[fd] = 0;
     }
   }
-
-  // Unmap paged
-  unmap(curproc);
 
   begin_op();
   iput(curproc->cwd);

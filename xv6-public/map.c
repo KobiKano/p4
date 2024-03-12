@@ -309,43 +309,69 @@ int sys_wunmap(void)
     ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED))
     {
         //write to file
-        struct file* f;
-        if(p->_wmapinfo.fds[i] < 0 || p->_wmapinfo.fds[i] >= NOFILE || (f=myproc()->ofile[p->_wmapinfo.fds[i]]) == 0)
-        {
-            //error return
-            //cprintf("2\n");
-            return FAILED;
-        }
-        
-        //write from each virtual address
-        uint addr_cpy = addr;
+        struct file* f = p->ofile[p->_wmapinfo.fds[i]];
         int n = 0;
+        uint addr_cpy = addr;
         while (n != p->_wmapinfo.alloc_length[i])
         {
-            filewrite(f, (char*)addr_cpy, PGSIZE);
+            //check if mapped
+            if (walkpgdir(p->pgdir, (void*)addr_cpy, 0) != 0x0)
+            {
+                int s = (p->_wmapinfo.length[i] < (n + PGSIZE)) ? p->_wmapinfo.length[i] - n : PGSIZE;
+                f->off = n;
+                filewrite(f, (void*)addr_cpy, s);
+            }
 
             n += PGSIZE;
             addr_cpy += 0x1000;
         }
-
     }
 
-    //remove mapping
-    //cprintf("remove_mappings\n");
-    remove_mappings(p, i);
+    //check if shared mapping
+    if ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED)
+    {
+        //cprintf("shared\n");
+        //check for overlap with parent
+        struct proc* par = p->parent;
+        for (int j = 0; j < par->_wmapinfo.total_mmaps; j++)
+        {
+            if (par->_wmapinfo.addr[j] == addr)
+            {
+                //match found
+                //invalidate ptes
+                uint addr_cpy = addr;
+                int n = 0;
+                while (n != p->_wmapinfo.alloc_length[i])
+                {
+                    pte_t* pte = walkpgdir(p->pgdir, (void*)addr_cpy, 0);
+                    *pte = 0;
+
+                    //increment
+                    n += PGSIZE;
+                    addr_cpy += 0x1000;
+                }
+
+                remove_mappings(p, j);
+
+                return SUCCESS;
+            }
+        }
+    }
 
     //free physical mappings
     //cprintf("remove physical\n");
     int n = 0;
     while(n != p->_wmapinfo.alloc_length[i])
     {
+        //cprintf("loop1\n");
         //cprintf("addr:%x   n:%d   len:%d\n", addr, n, p->_wmapinfo.alloc_length[i]);
         pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
 
         //check if entry alloc'd
-        if (pte != 0x0)
+        if ((*pte & PTE_P) == PTE_P)
         {
             uint pa = PTE_ADDR(pte[0]);
+            //cprintf("free wunmap\n");
             kfree(P2V(pa));
             *pte = 0;
         }
@@ -353,6 +379,9 @@ int sys_wunmap(void)
         n += PGSIZE;
         addr += 0x1000;
     }
+
+    //remove mapping
+    remove_mappings(p, i);
     
     //default return
     return SUCCESS;
@@ -370,18 +399,24 @@ int sys_wunmap(void)
 */
 int sys_wremap(void)
 {
+    //cprintf("wremap\n");
     uint oldaddr;
     int oldsize, newsize, flags;
     if (argint(0, (int *)&oldaddr) < 0 || argint(1, &oldsize) < 0 ||
-        argint(2, &newsize) < 0 || argint(3, &flags) < 0){
+        argint(2, &newsize) < 0 || argint(3, &flags) < 0)
+    {
+        //cprintf("0\n");
         return FAILED;
     }
     // Check if oldaddr is page aligned and within valid range
     if (oldaddr % PGSIZE != 0 || oldaddr < 0x60000000 || oldaddr >= KERNBASE) {
+        //cprintf("1\n");
         return FAILED;
     }
     // Check if newsize is greater than 0
-    if (newsize <= 0) {
+    if (newsize <= 0)
+    {
+        //cprintf("2\n");
         return FAILED;
     }
     // Get current process
@@ -391,31 +426,190 @@ int sys_wremap(void)
     int mapping_index = -1;
     for (int i = 0; i < p->_wmapinfo.total_mmaps; i++)
     {
-        if (oldaddr == p->_wmapinfo.addr[i])
+        if ((oldaddr == p->_wmapinfo.addr[i]) && (oldsize == p->_wmapinfo.length[i]))
         {
+            //cprintf("index:%d", i);
             mapping_index = i;
             break;
         }
     }
     // If mapping not found, return failure
-    if (mapping_index == -1){
+    if (mapping_index == -1)
+    {
+        //cprintf("3\n");
         return FAILED;
     }
 
-    if(flags==0){
-        //resizing in place
-        if (newsize <= oldsize) {
-            // Update the length of the mapping
-            p->_wmapinfo.length[mapping_index] = newsize;
-            return oldaddr; // Return the original address to indicate success
-        } else {
-            // Not enough space to grow the mapping in place, return failure
-            return FAILED;
-        }
-        
+    //check if given same size
+    if ((oldsize == newsize) || (p->_wmapinfo.alloc_length[mapping_index] == PGROUNDUP(newsize)))
+    {
+        //do nothing
+        return oldaddr;
     }
+
+    //check if shrinking mapping
+    if (oldsize > newsize)
+    {
+        int a_len = PGROUNDUP(newsize);
+
+        char match = 0;
+        //check if shared mapping
+        if ((p->_wmapinfo.flags[mapping_index] & MAP_SHARED) == MAP_SHARED)
+        {
+            //check if parent has shared mappings
+            struct proc* par = p->parent;
+
+            for (int j = 0; j < par->_wmapinfo.total_mmaps; j++)
+            {
+                if (par->_wmapinfo.addr[j] == p->_wmapinfo.addr[mapping_index])
+                {
+                    //match found
+                    match = 1;
+                    break;
+                }
+            }
+
+            //check if file backed
+            if ((p->_wmapinfo.flags[mapping_index] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
+            {
+                //write to file
+                struct file* f = p->ofile[p->_wmapinfo.fds[mapping_index]];
+                int n = a_len;
+                uint addr = p->_wmapinfo.addr[mapping_index] + LEN_TO_PAGE(a_len);
+                while (n != p->_wmapinfo.alloc_length[mapping_index])
+                {
+                    //check if mapped
+                    if (walkpgdir(p->pgdir, (void*)addr, 0) != 0x0)
+                    {
+                        int s = (p->_wmapinfo.length[mapping_index] < (n + PGSIZE)) ? p->_wmapinfo.length[mapping_index] - n : PGSIZE;
+                        f->off = n;
+                        filewrite(f, (void*)addr, s);
+                    }
+
+                    n += PGSIZE;
+                    addr += 0x1000;
+                }
+            }
+        }
+
+        //free memory if needed
+        if (match != 1)
+        {
+            uint addr = p->_wmapinfo.addr[mapping_index] + LEN_TO_PAGE(a_len);
+            int n = a_len;
+            while (n != p->_wmapinfo.alloc_length[mapping_index])
+            {
+                pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
+
+                //check if entry alloc'd
+                if ((*pte & PTE_P) == PTE_P)
+                {
+                    uint pa = PTE_ADDR(pte[0]);
+                    //cprintf("Free wremap\n");
+                    kfree(P2V(pa));
+                    *pte = 0;
+                }
+
+                n += PGSIZE;
+                addr += 0x1000;
+            }
+        }
+        //else invalidate pte
+        else
+        {
+            uint addr = p->_wmapinfo.addr[mapping_index] + LEN_TO_PAGE(a_len);
+            int n = a_len;
+            while (n != p->_wmapinfo.alloc_length[mapping_index])
+            {
+                pte_t* pte = walkpgdir(p->pgdir, (const void*)addr, 0);
+                *pte = 0;
+
+                n += PGSIZE;
+                addr += 0x1000;
+            }
+        }
+
+        //change mapping
+        p->_wmapinfo.alloc_length[mapping_index] = a_len;
+        p->_wmapinfo.length[mapping_index] = newsize;
+
+        //return
+        return oldaddr;
+    }
+
+    //else increasing size
+    else
+    {
+        char o = 0;
+        //check if can increase size in place
+        for (int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+        {
+            //check for overlap
+            if ((p->_wmapinfo.addr[i] != oldaddr) && within_bounds(p, i, oldaddr, PGROUNDUP(newsize)) < 0)
+            {
+                o = 1;
+                break;
+            }
+        }
+        //if no overlap change mapping
+        if (o == 0)
+        {
+            p->_wmapinfo.length[mapping_index] = newsize;
+            p->_wmapinfo.alloc_length[mapping_index] = PGROUNDUP(newsize);
+            return oldaddr;
+        }
+
+        //check if moving allowed
+        else if ((flags & MREMAP_MAYMOVE) == MREMAP_MAYMOVE)
+        {
+            //find moveable addr
+            uint n_addr = find_space(p, PGROUNDUP(newsize));
+            if (n_addr == 0x0)
+            {
+                //error return
+                //cprintf("4\n");
+                return FAILED;
+            }
+
+            //else change mapping
+            //iterate through page table and remap
+            int n = 0;
+            uint temp_addr = n_addr;
+            while (n != p->_wmapinfo.alloc_length[mapping_index])
+            {
+                pte_t* pte = walkpgdir(p->pgdir, (const void*)temp_addr, 0);
+
+                //check if page allocated
+                if ((*pte & PTE_P) == PTE_P)
+                {
+                    //remap page
+                    if (mappages(p->pgdir, (void*)temp_addr, PGSIZE, V2P(PTE_ADDR(*pte)), PTE_U | PTE_W) < 0)
+                    {
+                        //error return
+                        //cprintf("5\n");
+                        return FAILED;
+                    }
+                }
+
+                //increment
+                temp_addr += 0x1000;
+                n += PGSIZE;
+                *pte = 0;
+            }
+
+            //change mapping info
+            p->_wmapinfo.addr[mapping_index] = n_addr;
+            p->_wmapinfo.length[mapping_index] = newsize;
+            p->_wmapinfo.alloc_length[mapping_index] = PGROUNDUP(newsize);
+
+            //return
+            return n_addr;
+        }
+    }
+
     //default return
-    return SUCCESS;
+    //cprintf("7\n");
+    return FAILED;
 }
 
 /**
@@ -492,6 +686,7 @@ int sys_getpgdirinfo(void)
 */
 int sys_getwmapinfo(void)
 {
+    //cprintf("getwmpainfo\n");
     //get pointer
     struct wmapinfo* ptr;
     char* _ptr;
@@ -531,7 +726,6 @@ int page_fault_handler(uint addr)
       //check if within bounds
       if(addr >= p->_wmapinfo.addr[i] && addr < (p->_wmapinfo.addr[i] + LEN_TO_PAGE(p->_wmapinfo.alloc_length[i])))
       {
-        char success = 0;
         //add to pgdir
         addr = PGROUNDDOWN(addr);
         void* mem = (void*)kalloc();
@@ -542,40 +736,8 @@ int page_fault_handler(uint addr)
             return -1;
         }
 
-        //check flags for copy on write
-        if (((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE))
-        {
-            //find address of parent mem
-            struct proc* parent_proc = p->parent;
-            // check if parent has same mappings
-            int parent_mapping_index = -1;
-            for (int j = 0; j < parent_proc->_wmapinfo.total_mmaps; j++)
-            {
-                if (addr >= parent_proc->_wmapinfo.addr[j] &&
-                addr < (parent_proc->_wmapinfo.addr[j] + LEN_TO_PAGE(parent_proc->_wmapinfo.alloc_length[j])))
-                {
-                    //overlap found
-                    parent_mapping_index = j;
-                    break;
-                }
-            }
-
-            if (parent_mapping_index != -1){
-                //need to copy on write here
-                //cprintf("copy on write\n");
-                // Determine the physical address of the parent's memory corresponding to addr
-                uint parent_physical_address = PTE_ADDR(walkpgdir(parent_proc->pgdir, (void *)addr, 0)[0]);
-                void* parent_mem = P2V(parent_physical_address);
-                // Copy the content of the parent's memory to the newly allocated memory in the child process
-                memmove(mem, parent_mem, PGSIZE);
-                success = 1;
-            }
-
-            //else continue
-        }
-
         //fill with file contents
-        if (((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS) && (success != 1))
+        if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
         {
             //cprintf("write from file\n");
             //find offset within file
@@ -619,12 +781,10 @@ int page_fault_handler(uint addr)
                 // Zero-fill the remaining part of the page
                 memset(mem + bytesRead, 0, remainingBytes);
             }
-
-            success = 1;
         }
 
         //fill with empty
-        if ((success != 1) && (memset(mem, 0, PGSIZE) == 0x0))
+        else if (memset(mem, 0, PGSIZE) == 0x0)
         {
             cprintf("Segmentation Fault\n");
             kfree(mem);
@@ -657,34 +817,111 @@ int page_fault_handler(uint addr)
 */
 void copy_mappings(struct proc* p, struct proc* np)
 {
-    //TODO: FIX
-
+    //cprintf("copy mappings\n");
     //go through all mappings of the parent process
-    for(int i=0;i<p->_wmapinfo.total_mmaps;++i){
-        void *mem = kalloc();
-        if (mem == 0){
-            cprintf("Kalloc error\n");
-            return;
+    for(int i=0; i<p->_wmapinfo.total_mmaps; i++){
+        //cprintf("i:%d\n", i);
+        //check if shared mapping
+        if ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED)
+        {
+            //cprintf("shared\n");
+            //map parents physical memory to childs page table
+            uint addr = p->_wmapinfo.addr[i];
+            int n = 0;
+            while (n != p->_wmapinfo.alloc_length[i])
+            {
+                //find physical mem addr
+                pte_t* pte = walkpgdir(p->pgdir, (void*)addr, 0);
+                uint pa = -1;
+                if ((*pte & PTE_P) != PTE_P)
+                {
+                    //not allocated, allocate
+                    void* mem = kalloc();
+                    if (mem == 0x0)
+                    {
+                        cprintf("Kalloc Error\n");
+                        np->killed = 1;
+                        return;
+                    }
+                    //map parent mem
+                    if (mappages(p->pgdir, (void*)addr, PGSIZE, V2P(mem), PTE_U | PTE_W))
+                    {
+                        cprintf("Error mapping pages to child: killing child\n");
+                        np->killed = 1;
+                        return;
+                    }
+                    p->_wmapinfo.n_loaded_pages[i]++;
+                    pa = V2P(mem);
+                }
+                if (pa == -1)
+                {
+                    pa = PTE_ADDR(*pte);
+                }
+                //cprintf("pa:%x\n");
+
+                //map to new process mem
+                if (mappages(np->pgdir, (void*)addr, PGSIZE, pa, PTE_U | PTE_W) < 0)
+                {
+                    //error kill child
+                    cprintf("Error mapping pages to child: killing child\n");
+                    np->killed = 1;
+                    return;
+                }
+
+                //incremement values
+                n += PGSIZE;
+                addr += 0x1000;
+
+                //increment loaded pages
+                np->_wmapinfo.n_loaded_pages[i]++;
+            }
         }
 
-        //check if mapping is shared.
-        if ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED){
-            //move the child process, to the same physical address as parent
-            //memmove(mem, (void*)p->_wmapinfo.addr[i], PGSIZE);
-        }
-        else{
-            //if mapping private
-            //zero initialize the mem
-            memset(mem, 0, PGSIZE);
-        }
-        if (mappages(np->pgdir, (void*)p->_wmapinfo.addr[i], PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+        //check if private mapping
+        else if ((p->_wmapinfo.flags[i] & MAP_PRIVATE) == MAP_PRIVATE)
         {
-            //mapping failure
-            cprintf("Mapping failure\n");
-            kfree(mem); 
-            return; 
+            int n = 0;
+            uint addr = p->_wmapinfo.addr[i];
+            while (n != p->_wmapinfo.alloc_length[i])
+            {
+                void* mem = (void*)kalloc();
+                //error checking for kalloc success.
+                if (mem == 0x0)
+                {
+                    cprintf("Kalloc error\n");
+                    np->killed = 1;
+                    return;
+                }
+
+                //map memory
+                //get parent addr
+                uint ppa = PTE_ADDR(*(walkpgdir(p->pgdir, (void *)addr, 0)));
+                void* parent_mem = P2V(ppa);
+                //move
+                memmove(mem, parent_mem, PGSIZE);
+                //map
+                if (mappages(np->pgdir, (void*)addr, PGSIZE, V2P(mem), PTE_U | PTE_W) < 0)
+                {
+                    //error kill child
+                    cprintf("Error mapping pages to child: killing child\n");
+                    np->killed = 1;
+                    return;
+                }
+
+                //incrememnt values
+                n += PGSIZE;
+                addr += 0x1000;
+            }
         }
-        np->_wmapinfo.n_loaded_pages[i]++;
+
+        //cprintf("copy\n");
+        //copy mapping
+        np->_wmapinfo.addr[i] = p->_wmapinfo.addr[i];
+        np->_wmapinfo.alloc_length[i] = p->_wmapinfo.alloc_length[i];
+        np->_wmapinfo.length[i] = p->_wmapinfo.length[i];
+        np->_wmapinfo.fds[i] = p->_wmapinfo.fds[i];
+        np->_wmapinfo.flags[i] = p->_wmapinfo.flags[i];
+        np->_wmapinfo.total_mmaps = p->_wmapinfo.total_mmaps;
     }
 
 }
@@ -697,5 +934,63 @@ void copy_mappings(struct proc* p, struct proc* np)
 */
 void unmap(struct proc* p)
 {
+    //iterate through all mappings
+    for (int i = 0; i < p->_wmapinfo.total_mmaps; i++)
+    {
+        //check if shared mapping
+        if ((p->_wmapinfo.flags[i] & MAP_SHARED) == MAP_SHARED)
+        {
+            //check if file backed
+            if ((p->_wmapinfo.flags[i] & MAP_ANONYMOUS) != MAP_ANONYMOUS)
+            {
+                //write to file
+                struct file* f = p->ofile[p->_wmapinfo.fds[i]];
+                int n = 0;
+                uint addr = p->_wmapinfo.addr[i];
+                while (n != p->_wmapinfo.alloc_length[i])
+                {
+                    //check if mapped
+                    if (walkpgdir(p->pgdir, (void*)addr, 0) != 0x0)
+                    {
+                        int s = (p->_wmapinfo.length[i] < (n + PGSIZE)) ? p->_wmapinfo.length[i] - n : PGSIZE;
+                        f->off = n;
+                        filewrite(f, (void*)addr, s);
+                    }
 
+                    n += PGSIZE;
+                    addr += 0x1000;
+                }
+            }
+
+            //check if overlap with parent
+            struct proc* par = p->parent;
+            for (int j = 0; j < par->_wmapinfo.total_mmaps; j++)
+            {
+                if (p->_wmapinfo.addr[i] == par->_wmapinfo.addr[j])
+                {
+                    //match found
+                    remove_mappings(p, i);
+                    continue;
+                }
+            }
+        }
+
+        //invalidate ptes
+        uint addr = p->_wmapinfo.addr[i];
+        int n = 0;
+        while (n != p->_wmapinfo.alloc_length[i])
+        {
+            pte_t* pte = walkpgdir(p->pgdir, (void*)addr, 0);
+
+            (*pte) = (*pte) & ~PTE_P;
+
+            //increment values
+            n += PGSIZE;
+            addr += 0x1000;
+        }
+
+        //unmap
+        remove_mappings(p, i);
+        //cprintf("unmap return\n");
+    }
 }
